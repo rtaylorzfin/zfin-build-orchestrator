@@ -69,6 +69,6 @@ class FeatureRefresh {
         if (!changed) { info("every feature .env is up to date"); return }
         info(dryRun ? "--dry-run: nothing written"
                     : "${changed} .env file(s) updated. Recreate the affected containers to pick " +
-                      "them up:\n   cd <worktree> && ./z up -d")
+                      "them up:\n   cd <worktree> && z up -d")
     }
 }

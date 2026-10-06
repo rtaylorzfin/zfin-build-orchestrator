@@ -2,7 +2,7 @@
 // Provision an isolated feature dev stack: a git worktree plus its own Compose
 // project (own network, volumes, hostname) whose data is restored from a seed.
 // Several feature branches can then run in parallel without branch-switching or
-// reloading data. See reference/dev-stacks.md.
+// reloading data. See docs/dev-stacks.md.
 //
 // What Compose already handles per-project (no work here): the private network,
 // per-project volumes, and intra-network DNS (`db`/`solr` resolve to THIS
@@ -10,7 +10,7 @@
 // that escape the Docker network -- published ports and the loopback/hostname
 // mapping -- plus the worktree + per-feature .env.
 //
-// Normally invoked as `./z feature new [<ticket>] [opts]` from a checkout;
+// Normally invoked as `z feature new [<ticket>] [opts]` from a checkout;
 // runs standalone too. On a TTY it PROMPTS for the whole plan -- existing branch, base, tag,
 // shared db, boot, hosts, npm, dirtydeploy, liquibase, tmux -- whether or not <name> was given:
 // provisioning has more knobs than anyone wants to remember as flags. Every prompt is
@@ -20,7 +20,7 @@
 // tmux session sitting in the worktree.
 //
 // Usage:
-//   ./z feature new [<name>] [-y] [--base BRANCH] [--branch NAME] [--existing-branch]
+//   z feature new [<name>] [-y] [--base BRANCH] [--branch NAME] [--existing-branch]
 //                   [--seed TAG | --no-seed]
 //                         [--tag TAG] [--port-offset N] [--up]
 //                         [--shared-db] [--deploy] [--liquibase] [--tmux]
@@ -465,9 +465,9 @@ class NewFeature {
         // bare `sh: 1: webpack: not found`. Say so here instead, while it still reads as a
         // choice you made.
         if (doDeploy && !doNode && !new File(wt, 'node_modules').isDirectory())
-            info("note: dirtydeploy without npm ci in a fresh worktree fails at `webpack: not found` -- drop --no-node, or run `./z run -c \"gradle npmInstall\"` first")
+            info("note: dirtydeploy without npm ci in a fresh worktree fails at `webpack: not found` -- drop --no-node, or run `z run -c \"gradle npmInstall\"` first")
         if (doLiquibase && !(doUp || doSharedDb)) {
-            info("note: skipping liquibasePostBuild -- it needs the data tier up (re-run with --up, or run it yourself after ./z up db)")
+            info("note: skipping liquibasePostBuild -- it needs the data tier up (re-run with --up, or run it yourself after z up db)")
             doLiquibase = false
         }
         // What the restore step will extract. Decided here so the plan lists a restore only when
@@ -629,10 +629,10 @@ class NewFeature {
         outEnv << "ZFIN_COMPOSE_OVERLAYS=${overlays.join(':')}\n"
         if (tag) outEnv << "ZFIN_SEED=$tag\n"
         def composeFiles = ([new File(DOCKER, 'docker-compose.yml').absolutePath] +
-                            overlays.collect { new File(DOCKER, it).absolutePath }).join(':')
+                            overlays.collect { new File(zfinUtil.COMPOSE, it).absolutePath }).join(':')
 
 // 4. Compose command: the ORIGIN checkout's compose files plus this worktree's .env -- the
-//    same pair `./z` will resolve later from ZFIN_COMPOSE_OVERLAYS, so provisioning and every
+//    same pair `z` will resolve later from ZFIN_COMPOSE_OVERLAYS, so provisioning and every
 //    later command act on an identical stack definition.
         def compose = ['docker', 'compose',
                        '--project-name', project,
@@ -708,7 +708,7 @@ class NewFeature {
             info("${compose.join(' ')} up -d ${services.join(' ')}")
             runCommand(compose + ['up', '-d'] + services)
         } else if (doUp) {
-            info("nothing to auto-up yet (shared data tier is external; build+deploy, then ./z up tomcat httpd)")
+            info("nothing to auto-up yet (shared data tier is external; build+deploy, then z up tomcat httpd)")
         }
 
 // The two build steps the next: block used to just recommend. Both are NON-FATAL on
@@ -749,14 +749,14 @@ class NewFeature {
                 // The `cd` is not redundant with new-session's -c. tmux sets the pane's start
                 // directory, then the LOGIN shell runs .bash_profile on top -- and a profile
                 // that ends in `cd ~/zfin` (this one does) silently lands you in the primary
-                // checkout, where `./z` would resolve the wrong tree. Sending the cd re-asserts it
+                // checkout, where `z` would resolve the wrong tree. Sending the cd re-asserts it
                 // after the profile has had its say.
                 // send-keys takes a target-PANE, and '=' is not part of that grammar ("can't
                 // find pane: =<slug>") -- a bare session name is the right target here, and it
                 // is unambiguous anyway: has-session just told us this exact name was free.
                 runCommand(['tmux', 'send-keys', '-t', slug,
                             "cd '$wtPath'", 'C-m'])
-                info("tmux session '$slug' ready: cwd $wtPath (./z resolves this stack from here)")
+                info("tmux session '$slug' ready: cwd $wtPath (z resolves this stack from here)")
                 tmuxReady = true
             }
             // status-left is "[#{session_name}] " truncated at status-left-length, which
@@ -787,15 +787,15 @@ class NewFeature {
         def bringUp = doSharedDb
                 ? (warmApp
                 ? (doUp ? "  # tomcat+httpd up, serving $base's deploy on the SHARED db/solr at $url"
-                : "  ./z up tomcat httpd                  # app tier (data is the shared zfin_shared stack)")
-                : "  # data tier is the shared zfin_shared stack (needs `z shared up`); build+deploy, then ./z up tomcat httpd")
+                : "  z up tomcat httpd                  # app tier (data is the shared zfin_shared stack)")
+                : "  # data tier is the shared zfin_shared stack (needs `z shared up`); build+deploy, then z up tomcat httpd")
                 : cold
-                ? "  ./z build load-db load-solr          # COLD: load db + solr first (starts them itself)"
+                ? "  z build load-db load-solr          # COLD: load db + solr first (starts them itself)"
                 : (doUp
                 ? (warmApp ? "  # db+solr+tomcat+httpd already up -- serving $base's deploy at $url"
                 : "  # data tier (db + solr) is already up.")
-                : (warmApp ? "  ./z up db solr tomcat httpd          # full stack: instant (data + warm app tier)"
-                : "  ./z up db solr                       # data tier: already restored from the seed"))
+                : (warmApp ? "  z up db solr tomcat httpd          # full stack: instant (data + warm app tier)"
+                : "  z up db solr                       # data tier: already restored from the seed"))
 
 // Built as a line list rather than one interpolated heredoc: which lines belong here now
 // depends on warmApp x doDeploy x doLiquibase x did-it-fail, and nesting that many ternaries
@@ -806,15 +806,15 @@ class NewFeature {
             if (failed.contains('dirtydeploy')) dl << "  # !! dirtydeploy FAILED above -- fix, then re-run:"
             else if (doDeploy)                  dl << "  # THIS branch is deployed on top of it. Re-run after each edit:"
             else                                dl << "  # Deploy THIS branch's changes on top (fast, incremental):"
-            dl << '  ./z run -c "gradle dirtydeploy"'
+            dl << '  z run -c "gradle dirtydeploy"'
         } else {
             dl << (cold ? "  # first-time build + deploy, once the data is loaded;"
                         : "  # first-time build + deploy. The seed carries DB/Solr, so SKIP the load steps;")
-            dl << "  # the compile container's first run also provisions the TLS cert (reference/build-and-docker.md §1,§5):"
-            dl << '  ./z run -c "ant do && gradle make && ant deploy-catalina-base && ant deploy-no-tests-no-restart"'
-            dl << "  ./z up tomcat httpd                  # app tier -> $url"
+            dl << "  # the compile container's first run also provisions the TLS cert (the ZFIN repo's reference/build-and-docker.md §1,§5):"
+            dl << '  z run -c "ant do && gradle make && ant deploy-catalina-base && ant deploy-no-tests-no-restart"'
+            dl << "  z up tomcat httpd                  # app tier -> $url"
             dl << "  # fast edit -> see loop thereafter:"
-            dl << '  ./z run -c "gradle dirtydeploy"'
+            dl << '  z run -c "gradle dirtydeploy"'
         }
         if (doLiquibase && !failed.contains('liquibasePostBuild')) {
             dl << "  # this branch's schema/solr deltas are already applied (liquibasePostBuild ran)."
@@ -823,7 +823,7 @@ class NewFeature {
                     ? "  # !! liquibasePostBuild FAILED above -- fix, then re-run:"
                     : cold ? "  # this branch's schema/solr deltas (only if it changes them):"
                     : "  # this branch's schema/solr deltas on top of the seed (only if it changes them):")
-            dl << '  ./z run -c "gradle liquibasePostBuild"'
+            dl << '  z run -c "gradle liquibasePostBuild"'
         }
         def deploySteps = dl.join('\n')
 
@@ -858,8 +858,8 @@ $deploySteps
 teardown:
   z feature rm $slug                   # all of the below, automated (prompts first)
   # ...or by hand:
-  ./z stop                             # just pause it: containers stopped, data kept (./z up resumes)
-  ./z down -v                          # remove containers + THIS stack's DB/Solr/app copy
+  z stop                             # just pause it: containers stopped, data kept (z up resumes)
+  z down -v                          # remove containers + THIS stack's DB/Solr/app copy
   git worktree remove $wtPath${tmuxReady ? "\n  tmux kill-session -t $slug           # drop this feature's shell" : ''}
 """
         if (failed)

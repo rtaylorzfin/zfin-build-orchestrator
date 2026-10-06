@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 // check -- static checks for the tooling in lib/. Run it after editing anything there:
 //
-//   ./docker/utils/check
+//   ./check
 //
 // Two checks, because one is not enough and neither is obvious from running `z`:
 //

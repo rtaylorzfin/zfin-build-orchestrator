@@ -41,7 +41,7 @@ class FeatureSession {
 
                 def out = zfinUtil.archiveClaudeSession(project, slug)
                 if (!out) die("no sidecar session for '$slug' -- ${project}_${StackConfig.CLAUDE_VOL} does not exist.\n" +
-                              "   The volume appears the first time you run:  ./z run claude")
+                              "   The volume appears the first time you run:  z run claude")
                 info(String.format("archived %.1f MB -> %s", out.length() / 1048576.0, out))
                 break
 

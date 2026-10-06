@@ -4,11 +4,27 @@ Run several ZFIN feature branches at once, each in its own isolated Docker stack
 minutes from a **seed** — a captured copy of a loaded DB, Solr index and deployed app tier — with
 no `getdb`/`loaddb`/`getsolr`/`loadsolr` and no first-time full deploy per feature. Each stack is
 reachable on its own published port, and by name through an nginx-proxy when the host already
-runs one. The repo runs no proxy. This doc is the map: what the pieces are, how they fit, and how
+runs one. This tooling runs no proxy. This doc is the map: what the pieces are, how they fit, and how
 to use them.
 
 > Orientation only — the authoritative details live in each script's header comment
-> and in [build-and-docker.md](build-and-docker.md) / [deploying-changes.md](deploying-changes.md).
+> and in the ZFIN repo's [build-and-docker.md](https://github.com/ZFIN/zfin/blob/main/reference/build-and-docker.md) /
+> [deploying-changes.md](https://github.com/ZFIN/zfin/blob/main/reference/deploying-changes.md).
+
+## Install
+
+This tooling is opt-in and lives in its own checkout, beside your ZFIN checkouts rather than
+inside one. Install it once per host:
+
+```bash
+git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git ~/zfin-dev/zfin-build-orchestrator
+~/zfin-dev/zfin-build-orchestrator/z shell-init >> ~/.bashrc     # z on PATH + tab completion
+```
+
+Needs `groovy`, Docker with Compose v2, and git on the host. `z` then works from inside any
+ZFIN checkout or feature worktree: it asks git which checkout you are standing in, and takes
+the base `docker-compose.yml` and `docker/.env` from there. From anywhere else, set
+`ZFIN_REPO=<checkout>`. Update the tooling with `git pull` in its checkout.
 
 ---
 
@@ -27,7 +43,7 @@ to use them.
                                +  a Compose project whose volumes are RESTORED from the seed
                                   before anything starts
 
-  ./z <cmd>  in that tree ──▶  every stack op targets THIS feature, read from its
+  z <cmd>  in that tree ──▶  every stack op targets THIS feature, read from its
                                docker/.env; nothing to activate, nothing to deactivate
 ```
 
@@ -73,9 +89,9 @@ To reclaim a stack's disk without losing it, `z feature freeze` archives its vol
 
 ## The pieces
 
-**`docker/utils/z`** is the single front door (Groovy) — the only executable. Everything
-else lives in **`docker/utils/lib/`**; you invoke it as `./z <cmd>` from anywhere inside a
-checkout or worktree.
+**`z`** is the single front door (Groovy). The command classes live in **`lib/`**, the compose
+overlays and the sidecar's build context in **`compose/`**. Two kinds of path never mix: the
+tool's own files are found from where `z` lives, and the ZFIN checkout from where you run it.
 
 | File | Role |
 |------|------|
@@ -102,8 +118,8 @@ command class through one `GroovyClassLoader` (so `ZfinUtil` is a single `Class`
 `cmd.run(args, zfinUtil)` in-process — the helpers + roots arrive as a typed parameter. Stack
 ops auto-detect their target from the cwd; `z build`/`z scaffold`/`z fresh-install` need none (CI/bootstrap).
 
-**Compose files.** The base `docker-compose.yml` defines every service; four small overlays
-each encode one orthogonal choice:
+**Compose files.** The ZFIN checkout's base `docker-compose.yml` defines every service; four
+small overlays in `compose/` each encode one orthogonal choice:
 
 | file | decides |
 |---|---|
@@ -125,7 +141,7 @@ There is nothing to activate. Stack ops (`run`/`exec`/`up`/`stop`/`down`/`pull`/
 the stack that file describes for that one invocation — announced on stderr:
 
 ```bash
-./z run -c "gradle dirtydeploy"    # >> targeting 'zfin-10454' (zfin-10454)
+z run -c "gradle dirtydeploy"    # >> targeting 'zfin-10454' (zfin-10454)
 ```
 
 One stack per checkout or worktree, so there is nothing to search for. An explicit
@@ -214,10 +230,10 @@ z feature new review-pr -y --existing-branch --branch someones-branch --up
 #    after the slug, sitting in the worktree. (This is the one step z can't do for your
 #    current shell: `cd` changes the CALLING shell, which a child process cannot reach.
 #    Hence the session.)
-./z run -c "gradle dirtydeploy"               # deploy this branch's delta (warm app)
+z run -c "gradle dirtydeploy"               # deploy this branch's delta (warm app)
 # ...edit / dirtydeploy loop...
 
-# ...without --tmux, just cd there -- every ./z command then targets this stack:
+# ...without --tmux, just cd there -- every z command then targets this stack:
 cd $ZFIN_DEV_ROOT/worktrees/zfin-1234
 
 # 3. tear it down once the PR is merged (see below) -- `z feature rm` also kills the
@@ -408,5 +424,5 @@ publicly reachable is not.
 ## Related docs
 
 - [dev-stacks-by-example.md](dev-stacks-by-example.md) — every command above, shown as a terminal session
-- [build-and-docker.md](build-and-docker.md) — Docker services, image layering, deploy pipeline
-- [deploying-changes.md](deploying-changes.md) — what to run after editing X
+- ZFIN repo: [build-and-docker.md](https://github.com/ZFIN/zfin/blob/main/reference/build-and-docker.md) — Docker services, image layering, deploy pipeline
+- ZFIN repo: [deploying-changes.md](https://github.com/ZFIN/zfin/blob/main/reference/deploying-changes.md) — what to run after editing X

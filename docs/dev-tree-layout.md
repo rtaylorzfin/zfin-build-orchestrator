@@ -10,7 +10,7 @@ somewhere unexpected rather than an error.
 Create it with:
 
 ```bash
-./z scaffold --root ~/zfin-dev      # or just `./z scaffold` once ZFIN_DEV_ROOT is set
+z scaffold --root ~/zfin-dev      # or just `z scaffold` once ZFIN_DEV_ROOT is set
 ```
 
 It creates what is missing and never clobbers, so it is safe to re-run on a partially
@@ -22,6 +22,7 @@ set-up tree, and it prints the `ZFIN_DEV_ROOT` line to add to `docker/.env`.
 
 ```
 $ZFIN_DEV_ROOT/                  e.g. ~/zfin-dev  or  /opt/zfin-dev
+├── zfin-build-orchestrator/     this tooling: one install serves every checkout below.
 ├── <checkout>/                  the checkout — name it for the INSTANCE, not "zfin.org".
 │                                Its location is not a convention the tooling enforces: `z`
 │                                asks git where it is. It need not live here at all.

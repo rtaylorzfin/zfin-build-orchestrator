@@ -1,5 +1,5 @@
 // ZfinUtil -- shared helpers, canonical roots, and the volume capture/restore mechanics for the
-// dev-stack command classes in docker/utils/lib/. The single front door `docker/utils/z`
+// dev-stack command classes in lib/. The single front door `z`
 // loads ZfinUtil AND every command class through ONE GroovyClassLoader (with lib/ on its
 // classpath, so `ZfinUtil` resolves to a single Class everywhere), builds one instance, and
 // calls `cmd.run(args, zfinUtil)` in-process. So command classes get the helpers + roots as
@@ -16,15 +16,44 @@
 // runCommand(List, [check:false]) honors check, and childEnv injects extra process env
 // (zbuild sets it to default COMPOSE_FILE).
 class ZfinUtil {
-    // Canonical roots, derived from the one path z hands us -- no .parentFile depth-counting
-    // scattered across scripts; if the tree ever moves, only this constructor changes.
-    final File UTILS, LIB, DOCKER, REPO
-    ZfinUtil(File utils) {
-        UTILS  = utils.canonicalFile      // docker/utils
-        LIB    = new File(UTILS, 'lib')   // docker/utils/lib
-        DOCKER = UTILS.parentFile         // docker
-        REPO   = DOCKER.parentFile        // checkout root
+    // Two kinds of root, kept apart on purpose. The TOOL's own files sit beside `z`, wherever
+    // this checkout of the orchestrator lives: lib/ and compose/ (the overlays and the sidecar's
+    // build context). The ZFIN checkout it drives is a separate tree, found per run (REPO
+    // below), so one install serves every ZFIN checkout and worktree on the host.
+    final File HOME, LIB, COMPOSE
+    ZfinUtil(File home) {
+        HOME    = home.canonicalFile
+        LIB     = new File(HOME, 'lib')
+        COMPOSE = new File(HOME, 'compose')
     }
+
+    private File repoCache = null
+    /** The ZFIN checkout this run targets: $ZFIN_REPO if set, otherwise the MAIN checkout of
+     *  the git repo the working directory is in. The main checkout rather than the worktree you
+     *  stand in, because a feature stack's base compose file and base .env are the ones in the
+     *  checkout that owns its worktree (see stackSpec).
+     *
+     *  Resolved on first use, not in the constructor, so the commands that need no checkout
+     *  (help, scaffold, shell-init) work from anywhere. */
+    File getREPO() {
+        if (repoCache) return repoCache
+        def explicit = System.getenv('ZFIN_REPO')
+        File r = null
+        if (explicit) {
+            r = new File(explicit.replaceFirst('^~', System.getProperty('user.home')))
+        } else {
+            // --path-format=absolute: in the main checkout, --git-common-dir is otherwise the
+            // bare relative ".git".
+            def common = captureOutput(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
+            if (common) r = new File(common).parentFile
+        }
+        if (!r || !new File(r, 'docker/docker-compose.yml').isFile())
+            die(explicit ? "ZFIN_REPO=$explicit is not a ZFIN checkout (no docker/docker-compose.yml there)"
+                         : "not inside a ZFIN checkout -- cd into one (or a feature worktree), or set ZFIN_REPO")
+        repoCache = r.canonicalFile
+    }
+    /** The ZFIN checkout's docker/ directory: the base compose file and base .env. */
+    File getDOCKER() { new File(getREPO(), 'docker') }
 
     // Warm-volume contract + service roles + image names now live in StackConfig (policy).
 
@@ -70,12 +99,12 @@ class ZfinUtil {
                 : (isFeatureTree(dir) ? ['docker-compose.overlay-feature.yml'] : [])
         // Name the culprit: compose's own error for a missing -f does not say which file
         // records it, and every stack op would hit it.
-        def missing = overlays.findAll { !new File(DOCKER, it).isFile() }
+        def missing = overlays.findAll { !new File(COMPOSE, it).isFile() }
         if (missing)
             System.err.println("!! ${project}: docker/.env (ZFIN_COMPOSE_OVERLAYS) names overlay(s) " +
-                               "not in ${DOCKER}: ${missing.join(', ')}")
+                               "not in ${COMPOSE}: ${missing.join(', ')}")
         def files = ([new File(DOCKER, 'docker-compose.yml')] +
-                     overlays.collect { new File(DOCKER, it) })*.absolutePath
+                     overlays.collect { new File(COMPOSE, it) })*.absolutePath
         [project : project,
          dir     : dir.absolutePath,
          envFile : envF.absolutePath,
@@ -510,7 +539,7 @@ class ZfinUtil {
      *  failure is a directory appearing somewhere unexpected, not an error. Requiring it means
      *  a host states where its dev tree lives, once, in docker/.env.
      *
-     *  The recommended layout (reference/dev-tree-layout.md) puts repo, worktrees,
+     *  The recommended layout (docs/dev-tree-layout.md) puts repo, worktrees,
      *  archives, caches and the mounted data directories under this one parent, so a
      *  developer machine has a single thing to back up, relocate or delete. Individual
      *  directories can still be pointed elsewhere for offload -- see the overrides below --
@@ -522,7 +551,7 @@ class ZfinUtil {
                     "   It is the parent directory holding the repo, worktrees, archives,\n" +
                     "   caches and mounted data. Set it in docker/.env, e.g.\n" +
                     "     ZFIN_DEV_ROOT=${System.getProperty('user.home')}/zfin-dev\n" +
-                    "   See reference/dev-tree-layout.md for the recommended structure.")
+                    "   See docs/dev-tree-layout.md for the recommended structure.")
         v.replaceFirst('^~', System.getProperty('user.home'))
     }
 

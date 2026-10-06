@@ -18,7 +18,6 @@ class FeatureThaw {
         def die = zfinUtil.&die; def info = zfinUtil.&info
         def runCommand = zfinUtil.&runCommand; def captureOutput = zfinUtil.&captureOutput
         def runQuietly = zfinUtil.&runQuietly
-        def REPO = zfinUtil.REPO
 
         def name = null; def fromDir = null; def doUp = true; def force = false; def doCaches = true
         for (int i = 0; i < args.size(); i++) {
@@ -152,7 +151,7 @@ class FeatureThaw {
         // ---- bring it back ----------------------------------------------------------------
         if (!doUp) {
             info("volumes restored; --no-up, so the stack is left stopped.")
-            info("start it with:  cd ${wt} && ./z up")
+            info("start it with:  cd ${wt} && z up")
             timer.report("thaw '$slug' timing")
             return
         }

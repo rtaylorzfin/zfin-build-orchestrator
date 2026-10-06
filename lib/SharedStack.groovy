@@ -13,7 +13,7 @@
 // stops working the moment the shared data tier goes -- so it refuses while sharers are
 // running unless you say --stop-sharers, which stops their app tiers first, in order.
 //
-// SHARED DATA == SHARED WRITES: read-mostly features only. See reference/dev-stacks.md.
+// SHARED DATA == SHARED WRITES: read-mostly features only. See docs/dev-stacks.md.
 class SharedStack {
     def run(List args, ZfinUtil zfinUtil) {
         if (zfinUtil.helpRequested(args, this)) return
@@ -52,9 +52,9 @@ class SharedStack {
         // off the base docker/.env. No data overlay: like a feature stack, its volumes are
         // restored from a seed before anything starts, so the stock db/solr images find their
         // data already in place.
-        def files = ['docker-compose.yml', 'docker-compose.overlay-shared.yml']
+        def files = [new File(DOCKER, 'docker-compose.yml'), new File(zfinUtil.COMPOSE, 'docker-compose.overlay-shared.yml')]
         def compose = ['docker', 'compose', '-p', 'zfin_shared', '--env-file', new File(DOCKER, '.env').absolutePath] +
-                      files.collectMany { ['-f', new File(DOCKER, it).absolutePath] }
+                      files.collectMany { ['-f', it.absolutePath] }
         if (tag) {
             zfinUtil.childEnv['ZFIN_SEED'] = tag
         }

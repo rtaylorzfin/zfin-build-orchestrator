@@ -108,7 +108,7 @@ class SeedBuild {
             // --tag pinned, so a build started just before midnight does not change its name.
             def inner = (args - ['--tmux']) + (args.contains('--tag') ? [] : ['--tag', tag])
             def q = { String a -> "'" + a.replace("'", "'\\''") + "'" }
-            def cmd = "ZFIN_SEED_BUILD_IN_TMUX=1 ${q(new File(zfinUtil.UTILS, 'z').absolutePath)} seed build " +
+            def cmd = "ZFIN_SEED_BUILD_IN_TMUX=1 ${q(new File(zfinUtil.HOME, 'z').absolutePath)} seed build " +
                       inner.collect { q(it as String) }.join(' ') +
                       "; echo; read -r -p '[z seed build finished -- Enter closes this window] ' _"
             runCommand(['tmux', 'new-session', '-d', '-s', project, '-c', cwd.absolutePath, cmd])

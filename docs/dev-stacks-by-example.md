@@ -46,8 +46,8 @@ ZFIN_DEV_ROOT=/opt/zfin/source_roots/stacks
 ```
 
 ```console
-14:48:10 ryan@mac:.../stacks/base$ ./z help
-z -- ZFIN dev-stack tooling. Run it as `./z <cmd>` from a checkout or worktree.
+14:48:10 ryan@mac:.../stacks/base$ z help
+z -- ZFIN dev-stack tooling. Run it as `z <cmd>` from a checkout or worktree.
 
 Stack ops (act on the stack that owns the working directory):
   z run  [svc] [args]   run a command in a fresh container (default svc: compile)
@@ -76,7 +76,7 @@ CI / bootstrap (no activation needed):
   z build <phase...> [--build --test]   hands-free build/deploy (configure|load-db|
                                         load-solr|deploy-jenkins|deploy|all)
   z scaffold [--root DIR]               create the recommended dev-tree layout (see
-                                        reference/dev-tree-layout.md)
+                                        docs/dev-tree-layout.md)
   z fresh-install [--dry-run]           guided day-zero setup on a bare workstation
 
 Seeds (a loaded stack's volumes, captured once and restored into many):
@@ -101,11 +101,11 @@ stack here: zfin_org
 ### Putting `z` on PATH
 
 ```console
-14:49:02 ryan@mac:.../stacks/base$ ./z shell-init
+14:49:02 ryan@mac:.../stacks$ zfin-build-orchestrator/z shell-init
 # ZFIN dev-stack tooling. These lines are shell -- run them, or keep them:
 #
-#   eval "$(./z shell-init)"        # this shell only
-#   ./z shell-init >> ~/.bashrc     # and every shell after
+#   eval "$(/opt/zfin/source_roots/stacks/zfin-build-orchestrator/z shell-init)"        # this shell only
+#   /opt/zfin/source_roots/stacks/zfin-build-orchestrator/z shell-init >> ~/.bashrc     # and every shell after
 #
 # `z` then works from any directory. There is nothing to activate per stack: it asks
 # git which checkout owns your working directory, so one copy on PATH serves every
@@ -113,14 +113,13 @@ stack here: zfin_org
 
 # Prepended only if absent, so this is safe to eval twice and safe in an rc file that
 # something else also sources. POSIX `case`, so bash and zsh behave the same.
-case ":$PATH:" in *":/opt/zfin/source_roots/stacks/base/docker/utils:"*) ;; *) export PATH="/opt/zfin/source_roots/stacks/base/docker/utils:$PATH" ;; esac
+case ":$PATH:" in *":/opt/zfin/source_roots/stacks/zfin-build-orchestrator:"*) ;; *) export PATH="/opt/zfin/source_roots/stacks/zfin-build-orchestrator:$PATH" ;; esac
 
-# Tab completion: subcommands, service names, and each subcommand's flags. Works for
-# `z` and `./z` alike.
-source "/opt/zfin/source_roots/stacks/base/docker/utils/lib/z-completion.bash"
-14:49:10 ryan@mac:.../stacks/base$ eval "$(./z shell-init)"
+# Tab completion: subcommands, service names, and each subcommand's flags.
+source "/opt/zfin/source_roots/stacks/zfin-build-orchestrator/lib/z-completion.bash"
+14:49:10 ryan@mac:.../stacks$ zfin-build-orchestrator/z shell-init >> ~/.bashrc && source ~/.bashrc
 14:49:12 ryan@mac:.../stacks/base$ type z
-z is /opt/zfin/source_roots/stacks/base/docker/utils/z
+z is /opt/zfin/source_roots/stacks/zfin-build-orchestrator/z
 14:49:15 ryan@mac:.../stacks/base$ z <TAB><TAB>
 build          exec           help           pull           run            seed           shell-init     stop
 down           feature        log            restart        scaffold       shared         status         up
@@ -134,13 +133,13 @@ freeze   ls       new      refresh  rm       session  thaw
 ### A new machine: `z scaffold`
 
 ```console
-09:02:11 ryan@laptop:~/zfin-dev/coral$ ./z feature ls
+09:02:11 ryan@laptop:~/zfin-dev/coral$ z feature ls
 !! ZFIN_DEV_ROOT is not set.
    It is the parent directory holding the repo, worktrees, archives,
    caches and mounted data. Set it in docker/.env, e.g.
      ZFIN_DEV_ROOT=/Users/ryan/zfin-dev
-   See reference/dev-tree-layout.md for the recommended structure.
-09:02:30 ryan@laptop:~/zfin-dev/coral$ ./z scaffold --root ~/zfin-dev
+   See docs/dev-tree-layout.md for the recommended structure.
+09:02:30 ryan@laptop:~/zfin-dev/coral$ z scaffold --root ~/zfin-dev
 >> dev tree root: /Users/ryan/zfin-dev
   created  worktrees
   created  archive
@@ -162,9 +161,9 @@ freeze   ls       new      refresh  rm       session  thaw
 
 >> mounts/ is empty scaffolding. Point the DOCKER_*_PATH vars at it in docker/.env,
 >> or leave them at whatever this host already uses -- those paths are often shared
->> with other tooling rather than owned by this tree. See reference/dev-tree-layout.md.
+>> with other tooling rather than owned by this tree. See docs/dev-tree-layout.md.
 09:02:41 ryan@laptop:~/zfin-dev/coral$ echo 'ZFIN_DEV_ROOT=/Users/ryan/zfin-dev' >> docker/.env
-09:02:44 ryan@laptop:~/zfin-dev/coral$ ./z scaffold
+09:02:44 ryan@laptop:~/zfin-dev/coral$ z scaffold
 >> dev tree root: /Users/ryan/zfin-dev
   exists        worktrees
   ...
@@ -208,7 +207,7 @@ stack: none here -- cd into a checkout or feature worktree
 # `z` belongs on the host. Inside the compile container it refuses rather than half-working.
 14:50:30 ryan@mac:.../stacks/base$ z run
 >> targeting 'zfin_org' (base)
-gradle@3f1c0d9e2a7b:/opt/zfin/source_roots/zfin.org$ ./z status
+gradle@3f1c0d9e2a7b:/opt/zfin/source_roots/zfin.org$ z status
 !! z runs on the HOST, not inside a container (found /.dockerenv).
    Inside the compile container you already have the build tools -- run gradle/ant directly:
      gradle dirtydeploy
@@ -386,7 +385,7 @@ delete seed 'mactest' (6.5G) from /opt/zfin/source_roots/stacks/archive/seeds/ma
    Stacks made from it come up with db+solr only: httpd cannot start until
    $TARGETROOT is populated, and fails with an Apache config error that does
    not mention the cause. They need the full first build:
-     ./z run -c "ant do && gradle make && ant deploy-catalina-base && ant deploy-no-tests-no-restart"
+     z run -c "ant do && gradle make && ant deploy-catalina-base && ant deploy-no-tests-no-restart"
    To avoid that, capture from a stack that has been DEPLOYED -- an instance, or
    a feature stack you have built -- rather than from a data-only project.
 ...
@@ -559,7 +558,7 @@ BUILD FAILED in 4m 12s
 ## 5. A feature stack, interactively
 
 ```console
-14:40:02 ryan@mac:.../stacks/base$ ./z feature new zfin-12345
+14:40:02 ryan@mac:.../stacks/base$ z feature new zfin-12345
 New feature stack -- press Enter to accept [defaults].
   base branch [main]  (. = dev-stacks-slim):
   seed [2026-09-29]  (none = cold stack):
@@ -607,7 +606,7 @@ HEAD is now at 15984f0b5d ZFIN-10461: reproduce Load-NCBI-GFF3-File's real DB ef
 BUILD SUCCESSFUL in 1m 52s
 
 >> [5/7] start db solr tomcat httpd
->> docker compose --project-name zfin-12345 --env-file /opt/zfin/source_roots/stacks/worktrees/zfin-12345/docker/.env -f /opt/zfin/source_roots/stacks/base/docker/docker-compose.yml -f /opt/zfin/source_roots/stacks/base/docker/docker-compose.overlay-feature.yml up -d db solr tomcat httpd
+>> docker compose --project-name zfin-12345 --env-file /opt/zfin/source_roots/stacks/worktrees/zfin-12345/docker/.env -f /opt/zfin/source_roots/stacks/base/docker/docker-compose.yml -f /opt/zfin/source_roots/stacks/zfin-build-orchestrator/compose/docker-compose.overlay-feature.yml up -d db solr tomcat httpd
 [+] up 4/4
  ✔ Container zfin-12345-db-1      Healthy    13.8s
  ✔ Container zfin-12345-solr-1    Started     0.9s
@@ -619,7 +618,7 @@ BUILD SUCCESSFUL in 1m 52s
 BUILD SUCCESSFUL in 2m 37s
 
 >> [7/7] tmux session 'zfin-12345'
->> tmux session 'zfin-12345' ready: cwd /opt/zfin/source_roots/stacks/worktrees/zfin-12345 (./z resolves this stack from here)
+>> tmux session 'zfin-12345' ready: cwd /opt/zfin/source_roots/stacks/worktrees/zfin-12345 (z resolves this stack from here)
 
 >> provisioned zfin-12345
      worktree : /opt/zfin/source_roots/stacks/worktrees/zfin-12345
@@ -637,15 +636,15 @@ next:
   # db+solr+tomcat+httpd already up -- serving main's deploy at https://127.0.0.1:8448
   # the app tier is already serving main's code from the warm snapshot.
   # THIS branch is deployed on top of it. Re-run after each edit:
-  ./z run -c "gradle dirtydeploy"
+  z run -c "gradle dirtydeploy"
   # this branch's schema/solr deltas on top of the seed (only if it changes them):
-  ./z run -c "gradle liquibasePostBuild"
+  z run -c "gradle liquibasePostBuild"
 
 teardown:
   z feature rm zfin-12345                   # all of the below, automated (prompts first)
   # ...or by hand:
-  ./z stop                             # just pause it: containers stopped, data kept (./z up resumes)
-  ./z down -v                          # remove containers + THIS stack's DB/Solr/app copy
+  z stop                             # just pause it: containers stopped, data kept (z up resumes)
+  z down -v                          # remove containers + THIS stack's DB/Solr/app copy
   git worktree remove /opt/zfin/source_roots/stacks/worktrees/zfin-12345
   tmux kill-session -t zfin-12345           # drop this feature's shell
 
@@ -730,7 +729,7 @@ stack: zfin-12345
   jira     : https://zfin.atlassian.net/browse/zfin-12345
   pr       : https://github.com/rtaylorzfin/zfin/pull/new/zfin-12345
   seed     : 2026-09-29
-  compose  : /opt/zfin/source_roots/stacks/base/docker/docker-compose.yml:/opt/zfin/source_roots/stacks/base/docker/docker-compose.overlay-feature.yml
+  compose  : /opt/zfin/source_roots/stacks/base/docker/docker-compose.yml:/opt/zfin/source_roots/stacks/zfin-build-orchestrator/compose/docker-compose.overlay-feature.yml
   env-file : /opt/zfin/source_roots/stacks/worktrees/zfin-12345/docker/.env
   running  : db httpd solr tomcat
 
@@ -813,15 +812,15 @@ next:
   # db+solr+tomcat+httpd already up -- serving main's deploy at https://127.0.0.1:8449
   # the app tier is already serving main's code from the warm snapshot.
   # Deploy THIS branch's changes on top (fast, incremental):
-  ./z run -c "gradle dirtydeploy"
+  z run -c "gradle dirtydeploy"
   # this branch's schema/solr deltas on top of the seed (only if it changes them):
-  ./z run -c "gradle liquibasePostBuild"
+  z run -c "gradle liquibasePostBuild"
 
 teardown:
   z feature rm zfin-2001                   # all of the below, automated (prompts first)
   # ...or by hand:
-  ./z stop                             # just pause it: containers stopped, data kept (./z up resumes)
-  ./z down -v                          # remove containers + THIS stack's DB/Solr/app copy
+  z stop                             # just pause it: containers stopped, data kept (z up resumes)
+  z down -v                          # remove containers + THIS stack's DB/Solr/app copy
   git worktree remove /opt/zfin/source_roots/stacks/worktrees/zfin-2001
 
 
@@ -1228,7 +1227,7 @@ STATE: frozen = archived by `z feature freeze`, restore with `z feature thaw`
   zfin-10453: adding DOCKER_GIT_COMMON_DIR, DOCKER_GIT_WORKTREE_DIR
   zfin-10464: adding DOCKER_GIT_COMMON_DIR, DOCKER_GIT_WORKTREE_DIR
 >> 2 .env file(s) updated. Recreate the affected containers to pick them up:
-   cd <worktree> && ./z up -d
+   cd <worktree> && z up -d
 ```
 
 ---
@@ -1319,7 +1318,7 @@ BUILD FAILED
 ```
 
 ```console
-09:00:00 ryan@laptop:~/zfin-dev/coral$ ./z fresh-install --dry-run
+09:00:00 ryan@laptop:~/zfin-dev/coral$ z fresh-install --dry-run
 >> checking the machine is ZFIN-fresh...
 >>   fresh ✓ (no ZFIN volumes / images / containers)
 >> checking init inputs...
@@ -1334,13 +1333,13 @@ BUILD FAILED
 >> --dry-run: using defaults (pull images; no first ticket)
 
 Plan:
-  $ /Users/ryan/zfin-dev/coral/docker/utils/z build all
+  $ /Users/ryan/zfin-dev/zfin-build-orchestrator/z build all
 >> dry-run: not executing.
 ```
 
 ```console
-# After editing anything in docker/utils/lib/.
-11:30:00 ryan@mac:.../stacks/base$ ./docker/utils/check
+# After editing anything in lib/.
+11:30:00 ryan@mac:.../stacks/zfin-build-orchestrator$ ./check
 compiling lib/:
   ok    FeatureFreeze
   ok    FeatureList

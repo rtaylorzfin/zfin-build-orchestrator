@@ -2,7 +2,7 @@
 // z fresh-install -- guided day-zero setup on a BARE workstation (nothing in Docker yet).
 //
 // Interactive. Run it DIRECTLY from a checkout:
-//   docker/utils/z fresh-install [--dry-run]
+//   z fresh-install [--dry-run]     (from inside the ZFIN checkout to set up)
 //
 // Steps:
 //   1. verify the machine is ZFIN-fresh (no ZFIN volumes / images / containers)
@@ -27,9 +27,7 @@ class FreshInstall {
         if (zfinUtil.helpRequested(args, this)) return
         def die = zfinUtil.&die; def info = zfinUtil.&info; def captureOutput = zfinUtil.&captureOutput;
         def runCommand = zfinUtil.&runCommand
-        def UTILS = zfinUtil.UTILS
         def DOCKER = zfinUtil.DOCKER
-        def REPO = zfinUtil.REPO
         def envFile = new File(DOCKER, '.env')
         if (!envFile.exists()) die("$envFile not found -- run from a ZFIN checkout")
 
@@ -134,7 +132,7 @@ class FreshInstall {
         }
 
 // --- 5. the plan (everything routes through the single front door `z`) -----------
-        def zExe = new File(UTILS, 'z').absolutePath
+        def zExe = new File(zfinUtil.HOME, 'z').absolutePath
         def baseCompose = new File(DOCKER, 'docker-compose.yml').absolutePath
 
         def plan = []
@@ -173,9 +171,8 @@ class FreshInstall {
             def code = pb.start().waitFor()
             if (code != 0) die("step ${i + 1} failed ($code)", code)
         }
-        info("fresh install complete. Run z from the checkout:  ${new File(REPO, 'z')}")
-        info("  optional, once, in ~/.bashrc:  alias z=${new File(REPO, 'z')}")
-        info("  and for tab completion:        source ${new File(REPO, 'docker/utils/lib/z-completion.bash')}")
+        info("fresh install complete. Put z on PATH, with tab completion, once in ~/.bashrc:")
+        info("  ${new File(zfinUtil.HOME, 'z')} shell-init >> ~/.bashrc")
         if (firstTicket) info("...your feature: cd ${new File(zfinUtil.worktreesDir(), firstTicket.toLowerCase())} (z commands resolve it from there)")
     }
 }

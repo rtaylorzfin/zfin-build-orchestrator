@@ -36,7 +36,6 @@ class FeatureFreeze {
         def die = zfinUtil.&die; def info = zfinUtil.&info
         def runCommand = zfinUtil.&runCommand; def captureOutput = zfinUtil.&captureOutput
         def runQuietly = zfinUtil.&runQuietly
-        def REPO = zfinUtil.REPO
 
         def name = null; def doCaches = false; def force = false; def toDir = null
         def compress = null    // null = auto (see below)
@@ -111,7 +110,7 @@ class FeatureFreeze {
             def why = manifest.isFile()
                 ? "It looks already frozen: $dest has an archive from ${new groovy.json.JsonSlurper().parse(manifest).frozenAt}.\n" +
                   "   z feature thaw $slug   to bring it back."
-                : "Is it up? `z feature ls` shows its state; `cd ${wt} && ./z up` starts it."
+                : "Is it up? `z feature ls` shows its state; `cd ${wt} && z up` starts it."
             die("no volumes found for project '$project' -- there is nothing to archive.\n   $why")
         }
         info("volumes  : ${present.join(', ')}")

@@ -7,7 +7,7 @@
 //                 at existing organisation-wide locations, not at this tree.
 //   --dry-run     print what it would do.
 //
-// Everything this tooling reads or writes lives under one directory (reference/
+// Everything this tooling reads or writes lives under one directory (docs/
 // dev-tree-layout.md). That is several `mkdir`s and one .env line to get right by hand, on
 // every machine, which is exactly the sort of setup that drifts between developers.
 //
@@ -38,7 +38,7 @@ class Scaffold {
             die("no root given.\n" +
                 "   z scaffold --root <dir>      e.g. --root ${System.getProperty('user.home')}/zfin-dev\n" +
                 "   ...or set ZFIN_DEV_ROOT in docker/.env first.\n" +
-                "   See reference/dev-tree-layout.md.")
+                "   See docs/dev-tree-layout.md.")
         def root = new File(rootPath.replaceFirst('^~', System.getProperty('user.home'))).absoluteFile
 
         if (root.exists() && !root.isDirectory())
@@ -95,7 +95,7 @@ class Scaffold {
             println ""
             info("mounts/ is empty scaffolding. Point the DOCKER_*_PATH vars at it in docker/.env,")
             info("or leave them at whatever this host already uses -- those paths are often shared")
-            info("with other tooling rather than owned by this tree. See reference/dev-tree-layout.md.")
+            info("with other tooling rather than owned by this tree. See docs/dev-tree-layout.md.")
         }
     }
 }

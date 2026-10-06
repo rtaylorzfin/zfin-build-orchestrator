@@ -1,6 +1,6 @@
 // StackConfig -- the ONE home for ZFIN-specific policy: image names, host/naming patterns,
 // which services play which role, and the warm-volume classes. Everything else in
-// docker/utils/lib/ is generic mechanism (ZfinUtil + the command classes). When ZFIN's
+// lib/ is generic mechanism (ZfinUtil + the command classes). When ZFIN's
 // conventions change, they change HERE.
 //
 // It's all `static` -- these are constants and pure functions of tag/slug/release, not

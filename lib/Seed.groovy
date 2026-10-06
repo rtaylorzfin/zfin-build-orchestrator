@@ -39,7 +39,7 @@
 // cannot (overlayfs needs a local upperdir).
 //
 // The data is REAL ZFIN DATA. Seeds stay on storage you control. There is deliberately no
-// upload path (see "Data-sensitivity guardrail" in reference/dev-stacks.md).
+// upload path (see "Data-sensitivity guardrail" in docs/dev-stacks.md).
 class Seed {
     def run(List args, ZfinUtil zfinUtil) {
         // Before the help guard, so `z seed build --help` prints SeedBuild's own header.
@@ -390,7 +390,7 @@ class Seed {
                 System.err.println("   Stacks made from it come up with db+solr only: httpd cannot start until")
                 System.err.println("   \$TARGETROOT is populated, and fails with an Apache config error that does")
                 System.err.println("   not mention the cause. They need the full first build:")
-                System.err.println("     ./z run -c \"ant do && gradle make && ant deploy-catalina-base && ant deploy-no-tests-no-restart\"")
+                System.err.println("     z run -c \"ant do && gradle make && ant deploy-catalina-base && ant deploy-no-tests-no-restart\"")
                 System.err.println("   To avoid that, capture from a stack that has been DEPLOYED -- an instance, or")
                 System.err.println("   a feature stack you have built -- rather than from a data-only project.")
             }

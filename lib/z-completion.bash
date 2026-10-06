@@ -1,29 +1,14 @@
-# Bash tab-completion for `z`. Nothing sources this for you any more -- add it to ~/.bashrc:
-#   source /path/to/checkout/docker/utils/lib/z-completion.bash
-# `./z` completes too: bash falls back to the basename's compspec when the word has a slash.
+# Bash tab-completion for `z`. `z shell-init` prints the line that sources it.
 #   z <TAB>          -> subcommands           z build <TAB>   -> phases
 #   z run <TAB>      -> services              z feature <TAB> -> new | ls | rm | refresh | ...
-# The short names below (zrun/zfeature/...) are no longer defined for you; they still complete
-# if you define them yourself, e.g. `zrun() { ./z run "$@"; }`. For `z` the subcommand is $1;
-# for a short name the command word IS the subcommand (basename minus the leading z).
 _z_complete() {
-    local cur base sub argstart
+    local cur sub argstart=2
     cur="${COMP_WORDS[COMP_CWORD]}"
-    # Basename, so `./z` and `/path/to/z` behave like `z`. bash already hands a slashed word to
-    # the `z` compspec; without stripping the directory here the comparison below misses and the
-    # word falls into the short-name branch, where `./z` becomes the subcommand and matches
-    # nothing. `./z` is how the repo documents every command, so that is the common case.
-    base="${COMP_WORDS[0]##*/}"
-
-    if [[ "$base" == "z" ]]; then
-        if (( COMP_CWORD == 1 )); then
-            COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status build feature seed shared scaffold fresh-install shell-init help" -- "$cur") )
-            return
-        fi
-        sub="${COMP_WORDS[1]}"; argstart=2
-    else
-        sub="${base#z}"; argstart=1        # zrun->run, zfeature->feature, zbuild->build, ...
+    if (( COMP_CWORD == 1 )); then
+        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status build feature seed shared scaffold fresh-install shell-init help" -- "$cur") )
+        return
     fi
+    sub="${COMP_WORDS[1]}"
 
     local services="base compile claude db solr httpd tomcat tomcatdebug blast mailpit jenkins ncbiload fail2ban certbot elasticsearch filebeat metricbeat kibana jbrowse processgff"
     case "$sub" in
@@ -62,4 +47,4 @@ _z_complete() {
             fi ;;
     esac
 }
-complete -F _z_complete z zrun zexec zup zstop zdown zpull zlog zrestart zstatus zhelp zfeature zbuild
+complete -F _z_complete z
