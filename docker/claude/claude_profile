@@ -1,0 +1,62 @@
+
+# --- Claude sidecar -------------------------------------------------------------------
+# Appended to ~/.profile by docker/claude/Dockerfile. `z run claude` uses a LOGIN shell, so
+# this runs on every entry.
+
+# 1. Seed ~/.claude from the image defaults the first time this stack's claude_home volume is
+#    used. The volume mounts over ~/.claude, so image content at that path is invisible --
+#    hence copying rather than baking. Never overwrites: your settings survive re-entry.
+if [ ! -f "$HOME/.claude/settings.json" ]; then
+    mkdir -p "$HOME/.claude"
+    cp /opt/zfin/claude-defaults/settings.json "$HOME/.claude/settings.json"
+    cp /opt/zfin/claude-defaults/block-push.sh "$HOME/.claude/block-push.sh"
+    chmod 0755 "$HOME/.claude/block-push.sh"
+fi
+
+# User memory. Refreshed on every entry, not seeded once: this is guidance the image owns, and
+# a stale copy in a long-lived volume would quietly outlive the image it came from. Nothing
+# here is user-edited, unlike settings.json above.
+cp /opt/zfin/claude-defaults/CLAUDE.md "$HOME/.claude/CLAUDE.md" 2>/dev/null || true
+
+# 2. Auth. The token is a HOST file mounted read-only; it is deliberately NOT baked into the
+#    image and NOT stored in ~/.claude. That keeps credentials out of the claude_home volume,
+#    which `z feature freeze` archives -- otherwise every freeze archive would carry a working
+#    login to whatever storage it was parked on.
+# CLAUDE_CONFIG_DIR is set in the compose service so ~/.claude.json persists in the volume;
+# without it every entry re-runs onboarding. Defaulted here too so the image is still sane if
+# run outside compose.
+: "${CLAUDE_CONFIG_DIR:=$HOME/.claude}"
+export CLAUDE_CONFIG_DIR
+
+# 2b. Skip first-run onboarding. A valid CLAUDE_CODE_OAUTH_TOKEN authenticates API calls --
+#     `claude -p` works with nothing else -- but the interactive TUI still runs its first-run
+#     flow and shows the "Select login method" menu when ~/.claude.json has no
+#     hasCompletedOnboarding marker. In a container that is pure friction: there is no browser,
+#     and the token already answers the question the menu is asking. Merged rather than written
+#     only-when-absent, so a config created by an earlier run gets fixed too.
+python3 - <<'PY' 2>/dev/null || true
+import json, os
+p = os.path.join(os.environ.get('CLAUDE_CONFIG_DIR', os.path.expanduser('~/.claude')), '.claude.json')
+try:
+    d = json.load(open(p))
+except Exception:
+    d = {}
+changed = False
+for k in ('hasCompletedOnboarding', 'hasTrustDialogAccepted'):
+    if not d.get(k):
+        d[k] = True
+        changed = True
+if changed:
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    json.dump(d, open(p, 'w'))
+PY
+
+if [ -s /run/secrets/claude-token ]; then
+    CLAUDE_CODE_OAUTH_TOKEN="$(cat /run/secrets/claude-token)"
+    export CLAUDE_CODE_OAUTH_TOKEN
+else
+    echo "!! No Claude token mounted, so \`claude\` will not be able to authenticate."
+    echo "   On the HOST:  claude setup-token"
+    echo "   then save the token it prints to \$ZFIN_CLAUDE_TOKEN_FILE"
+    echo "   (default ~/.zfin/claude-token, mode 600) and re-enter with: z run claude"
+fi

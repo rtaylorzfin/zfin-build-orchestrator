@@ -1,0 +1,182 @@
+#!/usr/bin/env groovy
+// z -- the single front door for the ZFIN dev-stack tooling (Groovy, like lib/). Invoked as
+// `./z <cmd>` from a checkout or feature worktree: nothing to source, nothing to put on PATH.
+// Stack ops find their target from the working directory (ZfinUtil.resolveStack).
+//
+// z's whole job is to be the front door: self-locate, build ONE ZfinUtil, and ROUTE the
+// command to its class in lib/ -- run in-process (no forked groovy, no env plumbing).
+// Every command is a lib class with `run(List args, ZfinUtil zfinUtil)`; z loads them all
+// through one GroovyClassLoader (lib/ on its classpath -> `ZfinUtil` is a single Class, so
+// the typed param resolves and command classes can call each other).
+//
+//   stack ops (target from cwd):        run exec up down pull log restart status  -> StackOps
+//   feature ops:                       feature new|ls|rm|refresh|freeze|thaw|session
+//   seeds (host-wide, not per ticket): seed create|build|restore|ls|rm
+//   host-wide stacks (own project):    shared (db+solr)
+//   CI / bootstrap:                    build fresh-install scaffold
+//
+// Note: for interactive/long commands z stays parked as the parent JVM proxying stdio;
+// `docker compose ... -it` owns the PTY and sits in the foreground process group, so
+// resize/Ctrl-C behave -- the only cost is the JVM start.
+
+def SELF  = new File(getClass().protectionDomain.codeSource.location.toURI()).canonicalFile
+def UTILS = SELF.parentFile                     // docker/utils (canonical -> real, not the symlink)
+def LIB   = new File(UTILS, 'lib')
+
+def gcl = new GroovyClassLoader(getClass().classLoader)
+gcl.addClasspath(LIB.absolutePath)              // resolve ZfinUtil + command classes by name, one Class each
+def zfinUtil = gcl.loadClass('ZfinUtil').newInstance(UTILS)
+
+def argv = args as List
+def cmd  = argv ? argv[0] : 'help'
+def rest = argv.drop(1)
+
+// z drives the HOST docker daemon and reasons in HOST paths. Inside a container that premise
+// breaks -- and `z` is reachable in there: the compile service mounts the source tree AND
+// /var/run/docker.sock, and the image ships groovy. So `zrun` inside compile would spawn a
+// sibling compile, and the HOST paths z reasons in (/opt/zfin/source_roots/coral/...) name
+// something else, or nothing, on that side of the mount. Refuse early with a clear reason
+// instead of half-working. /.dockerenv is the reliable signal (docker always creates it;
+// cgroup v2 often reports a bare `0::/` in a container, so it's a weak secondary).
+// Escape hatch: a containerized CI agent driving `z build` is legitimate -- ZFIN_Z_IN_CONTAINER=1.
+if (new File('/.dockerenv').exists() && !System.getenv('ZFIN_Z_IN_CONTAINER')
+        && !(cmd in ['help', '-h', '--help'])) {
+    System.err.println("""\
+!! z runs on the HOST, not inside a container (found /.dockerenv).
+   Inside the compile container you already have the build tools -- run gradle/ant directly:
+     gradle dirtydeploy
+   Stack ops (z run/up/down/...) belong on the host, where the paths z resolves and the docker
+   daemon agree. If this really is a containerized CI agent with the socket mounted, opt in:
+     ZFIN_Z_IN_CONTAINER=1 z $cmd ...""")
+    System.exit(2)
+}
+
+// Load a command class and run it in this JVM. A command's die()/System.exit propagates as
+// z's exit; a normal return falls through to exit 0.
+def runCmd = { String cls, List a -> gcl.loadClass(cls).newInstance().run(a, zfinUtil) }
+
+def USAGE = '''z -- ZFIN dev-stack tooling. Run it as `./z <cmd>` from a checkout or worktree.
+
+Stack ops (act on the stack that owns the working directory):
+  z run  [svc] [args]   run a command in a fresh container (default svc: compile)
+                        e.g. z run -c "gradle dirtydeploy"   (== zrun -c "...")
+  z exec [svc] [args]   exec into the running container (default: compile)
+  z up   [svc...]       start service(s)            (default: all)
+  z stop [svc...]       stop service(s), keeping containers + data
+  z down [svc...]       remove containers + network (-v also discards this stack's data)
+  z pull [svc...]       pull image(s)
+  z log  [svc...]       tail logs
+  z restart [svc...]    restart service(s)
+  z status [-v]         the active stack: url, dir, branch, links, what is running
+                        (-v adds ports, compose/env files, and the container table)
+
+Feature ops:
+  z feature new [<ticket>] [opts]   provision a feature stack (prompts for the plan; -y
+                                    takes the defaults)
+  z feature ls                      list feature stacks (project, branch, data, up/down, url)
+  z feature rm <ticket> [--force]   tear down a feature (down -v + worktree/branch/hosts)
+  z feature refresh <t>|--all       backfill .env keys a stack was made too early to have
+  z feature freeze <ticket> [opts]  park it: archive its volumes, down -v, keep the worktree
+  z feature thaw <ticket> [opts]    bring a frozen stack back exactly as it was
+  z feature session export|ls       archive the sidecar's session history (outlives `rm`)
+
+CI / bootstrap (no activation needed):
+  z build <phase...> [--build --test]   hands-free build/deploy (configure|load-db|
+                                        load-solr|deploy-jenkins|deploy|all)
+  z scaffold [--root DIR]               create the recommended dev-tree layout (see
+                                        reference/dev-tree-layout.md)
+  z fresh-install [--dry-run]           guided day-zero setup on a bare workstation
+
+Seeds (a loaded stack's volumes, captured once and restored into many):
+  z seed new|create [--from P] [--tag T] capture db+solr (+ app tier) from a loaded stack
+  z seed build [--db F] [--solr D] [--tag T]
+                                         build a seed from a dump: load + deploy in a
+                                         throwaway stack, capture it, tear it down
+  z shell-init [bash|zsh]                shell lines to put `z` on PATH + enable completion
+  z seed restore [<tag>] [--app]         restore a seed into THIS stack (e.g. the base checkout's)
+  z seed ls / z seed rm <tag>            list / delete seeds
+
+Shared data stack (read-mostly features share ONE db+solr copy):
+  z shared up|down|status [--tag T]     run/stop the shared db+solr (project zfin_shared);
+                                        attach features with `z feature new --shared-db`
+  z shared freeze [--stop-sharers]      park the shared db+solr (refuses while sharers run)
+  z shared thaw                         restore them and start the shared stack
+
+  z help                                this help'''
+
+switch (cmd) {
+    case ['help', '-h', '--help']:
+        println USAGE
+        // stackSpec directly, not resolveStack: the latter announces ">> targeting ..." on
+        // stderr, which is noise in `z help`.
+        def top = zfinUtil.captureOutput(['git', 'rev-parse', '--show-toplevel'])
+        def spec = top ? zfinUtil.stackSpec(new File(top)) : null
+        println spec ? "\nstack here: ${spec.project}"
+                     : "\nstack here: (none) -- cd into a checkout or feature worktree"
+        break
+
+    // CI / bootstrap + the shared data stack (each manages its own project, so no target needed)
+    // build also auto-detects: GoCD sets COMPOSE_* explicitly (so this is a no-op there), but
+    // `./z build deploy` inside a feature worktree must mean THAT feature -- not the base stack
+    // Zbuild would otherwise fall back to.
+    case 'build':         zfinUtil.resolveStack(new File('.').canonicalFile); runCmd('Zbuild', rest); break
+    case 'fresh-install': runCmd('FreshInstall', rest); break
+    case 'scaffold':      runCmd('Scaffold', rest); break
+    case 'shared':        runCmd('SharedStack', rest); break
+    // `z seed create` captures A STACK, so it resolves one from the working directory like the
+    // stack ops do -- standing in a feature worktree and getting the BASE stack captured (or a
+    // "volume 'zfin_org_pg_data' not found" for a stack that is not even up) is a trap. --from
+    // still overrides, and ls/rm ignore the target entirely.
+    // ...except `seed build`, which makes its own stack and must not announce the cwd's.
+    case 'seed':
+        if (!(rest && rest[0] == 'build')) zfinUtil.resolveStack(new File('.').canonicalFile)
+        runCmd('Seed', rest); break
+    case 'shell-init':    runCmd('ShellInit', rest); break
+
+    // feature ops
+    case 'feature':
+        def fsub = rest ? rest[0] : ''
+        def fa = rest.drop(1)
+        // `z feature help <sub>` (or `z feature <sub> -h`) -> that subcommand's own --help.
+        if (fsub in ['help', '-h', '--help'] && fa && fa[0] in ['new', 'ls', 'rm',
+                                                        'freeze', 'thaw', 'session', 'refresh']) {
+            fsub = fa[0]; fa = ['--help']
+        }
+        switch (fsub) {
+            case 'new':             runCmd('NewFeature', fa); break
+            case 'ls': case 'list': runCmd('FeatureList', fa); break
+            case 'refresh':         runCmd('FeatureRefresh', fa); break
+            case 'rm':              runCmd('FeatureRemove', fa); break
+            case 'freeze':          runCmd('FeatureFreeze', fa); break
+            case 'thaw':            runCmd('FeatureThaw', fa); break
+            case 'session':         runCmd('FeatureSession', fa); break
+            case ['', '-h', '--help', 'help']:
+                (fsub ? System.out : System.err).println('''z feature -- per-feature dev stacks
+  new [<ticket>] [opts]    provision a feature stack: prompts for the plan (base, seed,
+                           shared db, boot, npm ci, dirtydeploy, liquibase, tmux) and runs
+                           it. -y / no TTY takes the defaults; a flag skips its prompt.
+  ls                       list feature stacks (project, branch, data, up/down, url)
+  rm <ticket> [--force]    tear a feature down (down -v + worktree/branch/hosts/tmux)
+  freeze <ticket> [opts]   park a stack: archive volumes + down -v (reversible; keeps the
+                           worktree)
+  thaw <ticket> [opts]     restore a frozen stack's volumes and start it
+  session export|ls        archive the sidecar's session history (kept past `rm`)
+Flags for a subcommand:  z feature <sub> --help   (e.g. z feature new --help)''')
+                System.exit(fsub ? 0 : 2)
+            default: zfinUtil.die("z feature: unknown '$fsub' (new|ls|rm|refresh|freeze|thaw|session)", 2)
+        }
+        break
+
+    // stack lifecycle -> StackOps (op is args[0]). These are the commands that need a TARGET,
+    // so they're the ones that get auto-detection: resolveStack asks git for this checkout's
+    // root and reads the docker/.env there (`./z run -c "gradle dirtydeploy"` just works, from
+    // any subdirectory). An explicit COMPOSE_* in the environment still wins. NOT the
+    // origin-side commands (feature/build/shared/fresh-install) -- they pass -p/-f/--env-file
+    // explicitly and shouldn't silently inherit whichever tree you happen to stand in.
+    case ['run', 'exec', 'up', 'stop', 'down', 'pull', 'log', 'restart', 'status']:
+        zfinUtil.resolveStack(new File('.').canonicalFile)
+        runCmd('StackOps', [cmd] + rest)
+        break
+
+    default: zfinUtil.die("z: unknown command '$cmd' (try: z help)", 2)
+}

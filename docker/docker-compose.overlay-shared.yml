@@ -1,0 +1,33 @@
+# Provider overlay for the shared data stack (Compose project `zfin_shared`): ONE db + solr,
+# restored from a seed, that several feature stacks read instead of each restoring its own
+# (~19-32G db + ~9G solr apiece). Used as
+#
+#   docker-compose.yml + this   (project=zfin_shared)
+#
+# via `z shared up`. A feature opts in with `z feature new --shared-db`, which suppresses its
+# own db/solr (docker-compose.overlay-shared-db.yml) and then `docker network connect`s THESE
+# containers into that feature's own default network, aliased db and solr. The app tier is
+# never attached to zfin_shared_net -- multi-homing tomcat breaks catalina's
+# -Djava.rmi.server.hostname, which is the constraint the whole arrangement is shaped around.
+#
+# SHARED DATA == SHARED WRITES: every attached feature reads and writes the SAME zfindb and
+# solr index. Safe only for read-mostly work -- a migration, a reindex or a curation edit by
+# one feature is instantly visible to, and can break, the others. There is no cheap
+# write-isolation: a separate DATABASE per feature is a full copy, which negates the saving.
+# See reference/dev-stacks.md.
+networks:
+  zfin_shared_net:
+    # A name worth fixing only so `docker network inspect zfin_shared_net` is guessable while
+    # debugging. Nothing declares it external: features reach these containers by having them
+    # connected INTO their own network, not by joining this one.
+    name: zfin_shared_net
+services:
+  db:
+    # No host port. These are reached over the network, and the base file's port comes from the
+    # same docker/.env the zfin_org stack uses -- so publishing here fights that stack for the
+    # same address the moment both are up.
+    ports: !reset null
+    networks: [zfin_shared_net]
+  solr:
+    ports: !reset null
+    networks: [zfin_shared_net]

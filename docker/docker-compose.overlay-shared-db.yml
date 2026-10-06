@@ -1,0 +1,26 @@
+# Consumer overlay for a feature that SHARES the `zfin_shared` data stack instead of running
+# its own db/solr (`z feature new --shared-db`; needs `z shared up` first). Its only job is to
+# suppress the feature's own db/solr, so no per-feature ~19-32G/~9G copy is created.
+#
+# The seed is still used, just not for data: `z feature new` restores the app tier and caches
+# from it and skips only pg_data/solr_var (NewFeature: `dataVols = doSharedDb ? [] : DATA_VOLS`),
+# so a --shared-db stack still comes up warm.
+#
+# How the webapp then reaches `db`/`solr`: NOT by putting the app tier on the shared network.
+# Multi-homing tomcat breaks its startup -- catalina sets
+# `-Djava.rmi.server.hostname=$(container ip)`, and with two networks that expands to two IPs,
+# the second leaking in as a bare java arg ("Could not find or load main class 172.x.x.x").
+# Instead `z feature new --shared-db` connects the SHARED db/solr containers INTO this
+# feature's default network (aliases db/solr) after `up`. The app tier stays single-homed;
+# postgres and solr do not mind being on several networks at once.
+#
+# SHARED DATA == SHARED WRITES: read-mostly features only. A migration, reindex or curation
+# edit by one sharer hits them all. See reference/dev-stacks.md.
+services:
+  # A profile nothing ever enables -> never started, so no per-feature volume or copy. The name
+  # is a label, not a switch: no `--profile local-data` exists anywhere in the tooling, and
+  # adding one would start a second db alongside the shared one.
+  db:
+    profiles: ["local-data"]
+  solr:
+    profiles: ["local-data"]

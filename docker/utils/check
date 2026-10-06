@@ -1,0 +1,78 @@
+#!/usr/bin/env groovy
+// check -- static checks for the tooling in lib/. Run it after editing anything there:
+//
+//   ./docker/utils/check
+//
+// Two checks, because one is not enough and neither is obvious from running `z`:
+//
+// 1. COMPILE every command class. `z --help` prints its usage from a string constant and
+//    never loads a command class, so it is not a compile check -- a syntax or scope error in
+//    a command sits undetected behind a green `z --help` until someone runs that command.
+//
+// 2. FIND UNQUALIFIED HELPER CALLS. Commands reach ZfinUtil either through a local alias
+//    (`def info = zfinUtil.&info`) or by qualifying (`zfinUtil.info(...)`). Groovy resolves
+//    method calls at RUNTIME, so a bare `runQuietly(...)` in a class that did not alias it
+//    compiles perfectly and throws MissingMethodException the first time that branch runs.
+//    That shipped twice: FeatureRemove's teardown chown and SharedStack's seeded-volume check,
+//    the second reaching a user. Check 1 cannot see either.
+//
+// Neither check runs anything or touches Docker. Exit 0 = clean.
+def libDir = new File(getClass().protectionDomain.codeSource.location.toURI()).parentFile
+def lib = new File(libDir, 'lib')
+if (!lib.isDirectory()) { System.err.println("!! no lib/ next to this script ($lib)"); System.exit(2) }
+
+int bad = 0
+
+// ---- 1. every class must load -------------------------------------------------------------
+println "compiling ${lib.name}/:"
+def gcl = new GroovyClassLoader()
+gcl.addClasspath(lib.absolutePath)
+lib.listFiles().findAll { it.name.endsWith('.groovy') }.sort { it.name }.each { f ->
+    def n = f.name - '.groovy'
+    try {
+        gcl.loadClass(n)
+        println "  ok    $n"
+    } catch (Throwable t) {
+        bad++
+        println "  FAIL  $n: ${t.message?.readLines()?.take(3)?.join(' | ')}"
+    }
+}
+
+// ---- 2. helper calls must be aliased or qualified -----------------------------------------
+// The list is ZfinUtil's instance helpers that a command would plausibly call. It does not
+// need to be exhaustive to be useful: every name here has either been called bare at some
+// point or sits next to one that was.
+def helpers = ['runCommand', 'runQuietly', 'captureOutput', 'captureOutputMerged', 'info', 'die',
+               'envField', 'onPath', 'imageExists', 'restoreVolumes', 'captureVolume',
+               'archiveFileFor', 'seedDir', 'seedsDir', 'newestSeed', 'sha256',
+               'readSeedManifest', 'writeSeedManifest', 'stepTimer', 'tarImage', 'volumeExists',
+               'devRoot', 'archiveDir', 'cacheDir', 'worktreesDir', 'featureStacks',
+               'stackSpec', 'connectSharedData', 'installHint', 'stackUrls', 'featureHost',
+               'hasPigz', 'featureSlugFromCwd', 'sharedProject',
+               'archiveClaudeSession', 'helpRequested', 'newestDbDump', 'solrSnapshots',
+               'stackInstance', 'writeStackEnv', 'sweepProjectVolumes', 'reclaimOwnership',
+               'cacheDir', 'envPath', 'prepareCacheVolumes', 'dataPlatform', 'dbImage'] as Set
+
+println "\nunqualified helper calls:"
+lib.listFiles().findAll { it.name.endsWith('.groovy') && !(it.name in ['ZfinUtil.groovy', 'StackConfig.groovy']) }
+   .sort { it.name }.each { f ->
+    def src = f.text
+    // Locally aliased helpers are fine: `def info = zfinUtil.&info`
+    def aliased = (src =~ /def\s+(\w+)\s*=\s*zfinUtil\.&(\w+)/).collect { it[1] } as Set
+    src.readLines().eachWithIndex { line, i ->
+        def t = line.trim()
+        if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return
+        helpers.each { h ->
+            if (h in aliased) return
+            // a call to `h(` not preceded by a dot/word (so not zfinUtil.h or someOther_h)
+            if (line =~ /(?<![\w.&])\Q${h}\E\s*\(/ && !(line =~ /zfinUtil\.\Q${h}\E/)) {
+                bad++
+                println "  ${f.name}:${i + 1}  bare ${h}( -- neither aliased in this file nor qualified"
+            }
+        }
+    }
+}
+if (bad == 0) println "  none"
+
+println bad == 0 ? "\nclean" : "\n${bad} problem(s)"
+System.exit(bad == 0 ? 0 : 1)

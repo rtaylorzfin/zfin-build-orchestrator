@@ -1,0 +1,21 @@
+# Every feature stack's overlay. `z feature new` records it in the stack's .env as
+# ZFIN_COMPOSE_OVERLAYS:
+#
+#   docker-compose.yml [+ docker-compose.overlay-shared-db.yml] + this [+ docker-compose.overlay-proxy-network.yml]
+#
+# Everything expressible as a VALUE lives in the stack's .env and is read by the base file:
+# published ports, DOCKER_EXTERNAL_VHOST for whether an outside proxy may route the stack, solr
+# sizing (StackConfig.featureEnv). What is left here is what a value cannot say: suppressing
+# services.
+services:
+  # certbot asks for a real certificate for the stack's hostname. A feature stack's name is not
+  # publicly resolvable, so it fails on every `up` and reads as a failure in `docker ps -a`; an
+  # outside proxy with acme-companion issues certificates itself if it can. Nothing depends on it.
+  certbot:
+    profiles: ["feature-certs"]
+  # fail2ban runs with network_mode: host, so its bans land in the host's (or the Docker VM's)
+  # iptables and block every stack on the machine, not just this one. Behind an outside proxy
+  # every request arrives from the proxy's address, so a burst of 403s from one page load bans
+  # the proxy itself.
+  fail2ban:
+    profiles: ["feature-fail2ban"]

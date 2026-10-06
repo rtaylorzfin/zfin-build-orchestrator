@@ -1,0 +1,18 @@
+# Joins a feature stack's httpd to an outside nginx-proxy's network, so that proxy can route
+# https://<DOCKER_VIRTUAL_HOST> to it. `z feature new` adds this overlay when docker/.env sets
+# ZFIN_PROXY_NETWORK, and also sets DOCKER_EXTERNAL_VHOST so httpd advertises VIRTUAL_HOST. The
+# repo runs no proxy: which one routes the stack, and how names resolve, is the host's business.
+#
+# A network cannot be conditional on a value -- `external: true` passes `config` and fails at
+# `up` when the network is absent -- which is why this is an overlay rather than a line in the
+# base file. VIRTUAL_PROTO/VIRTUAL_PORT stay at the base file's https/443: plain http to httpd
+# loops the admin paths and drops the `Secure` session cookie.
+services:
+  httpd:
+    networks:
+      default: {}
+      proxy: {}
+networks:
+  proxy:
+    external: true
+    name: ${ZFIN_PROXY_NETWORK:?set ZFIN_PROXY_NETWORK to the network an outside nginx-proxy watches}
