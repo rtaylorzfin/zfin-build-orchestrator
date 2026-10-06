@@ -1,0 +1,31 @@
+# Git, for a stack whose source tree is a git WORKTREE: every feature stack, and `z seed build`'s
+# throwaway stack. Not recorded in a stack's .env -- z adds it whenever the tree's .git is a
+# file rather than a directory (ZfinUtil.worktreeOverlay), so it follows the tree itself.
+#
+# A worktree's `.git` is a FILE holding an absolute path into the main repo
+# (`gitdir: <repo>/.git/worktrees/<slug>`), so a container given only the worktree cannot run
+# git at all -- every call is "fatal: not a git repository". The main .git must be reachable at
+# the SAME absolute path that pointer names, which is why these bind host path to host path. The
+# ant build shells out to git, and a missing repo there fails quietly with "Result: 128" rather
+# than stopping the build.
+#
+# Sibling worktrees are READ-ONLY: `git gc` runs `git worktree prune`, which deletes the admin
+# directory of any worktree whose path it cannot see -- in a container, every OTHER feature
+# stack on the host -- and it skips the usual expiry when doing so. Read-only turns silent data
+# loss into a failed delete.
+#
+# The variables are set per stack by StackConfig.featureEnv (and `z feature refresh`), always
+# as absolute paths: a mount target must be absolute.
+x-git-mounts:
+  common:   &git-common   "${DOCKER_GIT_COMMON_DIR:?not set for this worktree stack -- z feature refresh adds it}:${DOCKER_GIT_COMMON_DIR}:rw"
+  siblings: &git-siblings "${DOCKER_GIT_COMMON_DIR}/worktrees:${DOCKER_GIT_COMMON_DIR}/worktrees:ro"
+  ours:     &git-ours     "${DOCKER_GIT_WORKTREE_DIR:?not set for this worktree stack -- z feature refresh adds it}:${DOCKER_GIT_WORKTREE_DIR}:rw"
+  tree:     &git-tree     "${DOCKER_SOURCE_ROOTS_PATH}:${DOCKER_SOURCE_ROOTS_PATH}:rw"
+
+services:
+  compile:
+    volumes: [*git-common, *git-siblings, *git-ours, *git-tree]
+  jenkins:
+    volumes: [*git-common, *git-siblings, *git-ours, *git-tree]
+  ncbiload:
+    volumes: [*git-common, *git-siblings, *git-ours, *git-tree]

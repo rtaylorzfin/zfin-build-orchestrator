@@ -628,8 +628,10 @@ class NewFeature {
         // behind the tooling it was copied from.
         outEnv << "ZFIN_COMPOSE_OVERLAYS=${overlays.join(':')}\n"
         if (tag) outEnv << "ZFIN_SEED=$tag\n"
+        // A feature's tree is always a worktree, so it also gets the git mounts (stackSpec adds
+        // the same overlay on every later command, from the tree itself).
         def composeFiles = ([new File(DOCKER, 'docker-compose.yml').absolutePath] +
-                            overlays.collect { new File(zfinUtil.COMPOSE, it).absolutePath }).join(':')
+                            (overlays + ['docker-compose.overlay-worktree.yml']).collect { new File(zfinUtil.COMPOSE, it).absolutePath }).join(':')
 
 // 4. Compose command: the ORIGIN checkout's compose files plus this worktree's .env -- the
 //    same pair `z` will resolve later from ZFIN_COMPOSE_OVERLAYS, so provisioning and every

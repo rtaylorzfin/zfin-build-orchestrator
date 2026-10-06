@@ -118,12 +118,13 @@ command class through one `GroovyClassLoader` (so `ZfinUtil` is a single `Class`
 `cmd.run(args, zfinUtil)` in-process — the helpers + roots arrive as a typed parameter. Stack
 ops auto-detect their target from the cwd; `z build`/`z scaffold`/`z fresh-install` need none (CI/bootstrap).
 
-**Compose files.** The ZFIN checkout's base `docker-compose.yml` defines every service; four
-small overlays in `compose/` each encode one orthogonal choice:
+**Compose files.** The ZFIN checkout's base `docker-compose.yml` defines every service; small
+overlays in `compose/` each encode one orthogonal choice:
 
 | file | decides |
 |---|---|
-| `docker-compose.overlay-feature.yml` | this is a feature stack: certbot and fail2ban stay out |
+| `docker-compose.overlay-feature.yml` | this is a feature stack: certbot and fail2ban stay out, and it has a Claude sidecar (`z run claude`) |
+| `docker-compose.overlay-worktree.yml` | the tree is a git worktree, so git in the containers needs the main repo mounted. Added by `z` whenever the tree's `.git` is a file; never recorded in `.env` |
 | `docker-compose.overlay-proxy-network.yml` | its httpd joins an outside nginx-proxy's network |
 | `docker-compose.overlay-shared.yml` | this project is the shared data **provider** (`zfin_shared`) |
 | `docker-compose.overlay-shared-db.yml` | this stack **consumes** shared data instead of its own |

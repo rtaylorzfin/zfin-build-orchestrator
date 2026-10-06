@@ -25,6 +25,16 @@ class ZfinUtil {
         HOME    = home.canonicalFile
         LIB     = new File(HOME, 'lib')
         COMPOSE = new File(HOME, 'compose')
+        // Overlays name files under compose/ (the sidecar's build context) by this variable,
+        // because compose resolves relative paths against the BASE file's directory.
+        childEnv['ZFIN_COMPOSE_DIR'] = COMPOSE.absolutePath
+    }
+
+    /** docker-compose.overlay-worktree.yml when `dir` is a git worktree (its .git is a FILE),
+     *  else nothing. Derived from the tree rather than recorded in its .env: whether git in a
+     *  container needs the main repo mounted is a fact about the tree, not a choice. */
+    List<String> worktreeOverlay(File dir) {
+        new File(dir, '.git').isFile() ? ['docker-compose.overlay-worktree.yml'] : []
     }
 
     private File repoCache = null
@@ -94,9 +104,9 @@ class ZfinUtil {
         // a feature worktree. A checkout's own stack (the base checkout, an instance) gets base
         // compose alone: giving it the feature overlay is how `z up` in the base checkout ended
         // up joining a proxy network, or dropping services an instance wants.
-        def overlays = declared
+        def overlays = (declared
                 ? envField(envF, 'ZFIN_COMPOSE_OVERLAYS').tokenize(':').findAll { it }
-                : (isFeatureTree(dir) ? ['docker-compose.overlay-feature.yml'] : [])
+                : (isFeatureTree(dir) ? ['docker-compose.overlay-feature.yml'] : [])) + worktreeOverlay(dir)
         // Name the culprit: compose's own error for a missing -f does not say which file
         // records it, and every stack op would hit it.
         def missing = overlays.findAll { !new File(COMPOSE, it).isFile() }

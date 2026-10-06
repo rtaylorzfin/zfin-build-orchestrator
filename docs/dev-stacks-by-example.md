@@ -606,7 +606,7 @@ HEAD is now at 15984f0b5d ZFIN-10461: reproduce Load-NCBI-GFF3-File's real DB ef
 BUILD SUCCESSFUL in 1m 52s
 
 >> [5/7] start db solr tomcat httpd
->> docker compose --project-name zfin-12345 --env-file /opt/zfin/source_roots/stacks/worktrees/zfin-12345/docker/.env -f /opt/zfin/source_roots/stacks/base/docker/docker-compose.yml -f /opt/zfin/source_roots/stacks/zfin-build-orchestrator/compose/docker-compose.overlay-feature.yml up -d db solr tomcat httpd
+>> docker compose --project-name zfin-12345 --env-file /opt/zfin/source_roots/stacks/worktrees/zfin-12345/docker/.env -f /opt/zfin/source_roots/stacks/base/docker/docker-compose.yml -f /opt/zfin/source_roots/stacks/zfin-build-orchestrator/compose/docker-compose.overlay-feature.yml -f /opt/zfin/source_roots/stacks/zfin-build-orchestrator/compose/docker-compose.overlay-worktree.yml up -d db solr tomcat httpd
 [+] up 4/4
  ✔ Container zfin-12345-db-1      Healthy    13.8s
  ✔ Container zfin-12345-solr-1    Started     0.9s
@@ -729,7 +729,7 @@ stack: zfin-12345
   jira     : https://zfin.atlassian.net/browse/zfin-12345
   pr       : https://github.com/rtaylorzfin/zfin/pull/new/zfin-12345
   seed     : 2026-09-29
-  compose  : /opt/zfin/source_roots/stacks/base/docker/docker-compose.yml:/opt/zfin/source_roots/stacks/zfin-build-orchestrator/compose/docker-compose.overlay-feature.yml
+  compose  : /opt/zfin/source_roots/stacks/base/docker/docker-compose.yml:/opt/zfin/source_roots/stacks/zfin-build-orchestrator/compose/docker-compose.overlay-feature.yml:/opt/zfin/source_roots/stacks/zfin-build-orchestrator/compose/docker-compose.overlay-worktree.yml
   env-file : /opt/zfin/source_roots/stacks/worktrees/zfin-12345/docker/.env
   running  : db httpd solr tomcat
 

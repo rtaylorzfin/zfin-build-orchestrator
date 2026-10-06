@@ -6,7 +6,7 @@
 # Everything expressible as a VALUE lives in the stack's .env and is read by the base file:
 # published ports, DOCKER_EXTERNAL_VHOST for whether an outside proxy may route the stack, solr
 # sizing (StackConfig.featureEnv). What is left here is what a value cannot say: suppressing
-# services.
+# services, and the Claude sidecar, which only a feature stack has.
 services:
   # certbot asks for a real certificate for the stack's hostname. A feature stack's name is not
   # publicly resolvable, so it fails on every `up` and reads as a failure in `docker ps -a`; an
@@ -19,3 +19,94 @@ services:
   # the proxy itself.
   fail2ban:
     profiles: ["feature-fail2ban"]
+  claude:
+    # The per-feature Claude sidecar (docker/claude/Dockerfile).
+    # Reached by the verb that already reaches services -- `./z run claude`, like `./z run
+    # compile` -- so there is no bespoke command and no second way in. The profile keeps it out
+    # of a plain `up`; `docker compose run <svc>` enables a service's own profile.
+    profiles:
+      - claude
+    # The build context is this tool's compose/claude/. Paths in every -f file resolve against
+    # the BASE file's directory (the ZFIN checkout's docker/), so it has to be absolute; z sets
+    # ZFIN_COMPOSE_DIR for everything it runs. A fallback rather than `:?`, which would fail
+    # every compose command on the stack run outside z, not only a build of this service.
+    build:
+      context: ${ZFIN_COMPOSE_DIR:-/ZFIN_COMPOSE_DIR-unset--build-claude-through-z}/claude
+      args:
+        ZFIN_RELEASE: ${ZFIN_RELEASE}
+        DOCKER_ARCH: ${DOCKER_ARCH:-}
+    # Local-only name (no ghcr.io prefix): a developer's agent environment is not registry
+    # material.
+    image: zfin-claude:${ZFIN_RELEASE}${DOCKER_ARCH:-}
+    pull_policy: never
+    environment:
+      PGHOST: db
+      PGUSER: postgres
+      TZ: ${TZ}
+      INSTANCE: ${DOCKER_INSTANCE}
+      ZFIN_RELEASE: ${ZFIN_RELEASE}
+      DOCKER_INSTANCE: ${DOCKER_INSTANCE}
+      DOCKER_VIRTUAL_HOST: ${DOCKER_VIRTUAL_HOST}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
+      # Claude Code keeps ~/.claude.json BESIDE ~/.claude, so by default it lands in the
+      # throwaway layer and every entry looks like a first-ever install -- asking you to log in
+      # again with a valid token already present. Point it at the mounted volume and onboarding
+      # happens once.
+      CLAUDE_CONFIG_DIR: /home/gradle/.claude
+      # Serves no TLS, so it needs no cert -- and mounting tls_certs to persist one would hand
+      # it the stack's private key for nothing.
+      ZFIN_SKIP_CERT_SETUP: "true"
+      # Lets a session identify itself rather than infer it: /.dockerenv proves "a container",
+      # this proves "the ZFIN sidecar", where `z`/`zrun` are host commands and refuse.
+      ZFIN_SIDECAR: "true"
+    volumes:
+      # The one feature worktree, read-write -- the point of the thing.
+      - ${DOCKER_SOURCE_ROOTS_PATH}:/opt/zfin/source_roots/zfin.org:rw
+      # git: a feature's tree is a worktree, so these are the mounts
+      # docker-compose.overlay-worktree.yml gives compile (see the reasons there). Spelled out
+      # here because that overlay is also used without this one, by `z seed build`.
+      - ${DOCKER_GIT_COMMON_DIR}:${DOCKER_GIT_COMMON_DIR}:rw
+      - ${DOCKER_GIT_COMMON_DIR}/worktrees:${DOCKER_GIT_COMMON_DIR}/worktrees:ro
+      - ${DOCKER_GIT_WORKTREE_DIR}:${DOCKER_GIT_WORKTREE_DIR}:rw
+      - ${DOCKER_SOURCE_ROOTS_PATH}:${DOCKER_SOURCE_ROOTS_PATH}:rw
+      # Its own ~/.claude, per stack. `z feature freeze` archives this volume, which is why the
+      # auth token is NOT kept in it -- that comes from a host file, read-only, one file, so the
+      # container can use the token but not rewrite it.
+      - claude_home:/home/gradle/.claude
+      - ${ZFIN_CLAUDE_TOKEN_FILE:-/dev/null}:/run/secrets/claude-token:ro
+      # Dumps read-only, so `loaddb`/`loadsolr` work. Withholding them would buy nothing -- the
+      # sidecar already reaches the live database over the compose network and can read every
+      # row. Contrast /mnt/research, deliberately NOT mounted: that one spans other instances
+      # and production unloads. :ro also means the agent cannot corrupt the dumps every other
+      # stack loads from. (`loaddb` does destroy and rebuild THIS stack's database -- accepted,
+      # because a thaw or re-seed restores it in about two minutes.)
+      - ${DOCKER_DB_UNLOADS_PATH}:/opt/zfin/unloads/db:ro
+      - ${DOCKER_SOLR_UNLOADS_PATH}:/opt/zfin/unloads/solr:ro
+      # Build/deploy targets, so the agent can compile, test and dirtydeploy rather than handing
+      # every build back to a human.
+      - www_data:/opt/zfin/www_homes/zfin.org
+      - catalina_base:/opt/zfin/catalina_bases/zfin.org
+      # Jenkins' home, so `jenkins-cli` works in here as it does in `compile`. This path looks
+      # like part of www_data but is its own volume mounted over that spot, and it holds
+      # secrets/initialAdminPassword and the stored API token -- so this IS a credential, and a
+      # deliberate exception to the no-credentials rule below. Accepted because the blast radius
+      # is one feature stack's own Jenkins, triggering that stack's jobs against that stack's
+      # database -- which the agent can already read directly over the compose network. Nothing
+      # here reaches another stack, the host, or a remote.
+      - jenkins_data:/opt/zfin/www_homes/zfin.org/server_apps/jenkins/jenkins-home
+      - keystore:/opt/apache/apache-tomcat/conf
+      # generate_base.sh's cert steps are guarded by `if [ ! -f ]`; they re-ran on every entry
+      # only because without this mount the cert landed in the throwaway layer. Mounting it
+      # makes the guard work.
+      - tls_certs:/opt/zfin/tls
+      - static_data:/opt/zfin/static
+      - maven_cache:/home/gradle/.m2
+      - gradle_cache:/home/gradle/.gradle
+      - npm_cache:/home/gradle/.npm
+      # NO docker.sock and NO ssh-auth.sock, on purpose: either mount would make
+      # `--dangerously-skip-permissions` here more dangerous than running on the host.
+      # Omitting them is what makes "the agent cannot push" structural rather than a rule
+      # someone has to remember.
+
+volumes:
+  claude_home:

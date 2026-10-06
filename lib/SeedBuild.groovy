@@ -93,8 +93,12 @@ class SeedBuild {
         // name, and `git worktree list` should say what this one is.
         def src = new File(stage, project)
         def baseEnv = new File(zfinUtil.DOCKER, '.env')
-        def composeFile = new File(zfinUtil.DOCKER, 'docker-compose.yml').absolutePath
-        def compose = ['docker', 'compose', '-p', project, '--env-file', envF.absolutePath, '-f', composeFile]
+        // Base compose plus the worktree overlay: the build runs in its own git worktree, and the
+        // ant build needs git. Colon-joined, as COMPOSE_FILE takes it (set below).
+        def composeFile = [new File(zfinUtil.DOCKER, 'docker-compose.yml'),
+                           new File(zfinUtil.COMPOSE, 'docker-compose.overlay-worktree.yml')]*.absolutePath.join(':')
+        def compose = ['docker', 'compose', '-p', project, '--env-file', envF.absolutePath] +
+                      composeFile.tokenize(':').collectMany { ['-f', it] }
         def cwd = new File('.').canonicalFile
         def repoTop = captureOutput(['git', '-C', cwd.absolutePath, 'rev-parse', '--show-toplevel']) ?: zfinUtil.REPO.absolutePath
         def inspectHint = "COMPOSE_PROJECT_NAME=$project COMPOSE_FILE=$composeFile COMPOSE_ENV_FILES=$envF z log tomcat"
