@@ -41,7 +41,7 @@ class StackConfig {
         ZFIN_CACHE_DIR        : 'download caches (default: $ZFIN_DEV_ROOT/cache)',
         ZFIN_SEED             : 'seed a new feature or the shared stack restores (default: the newest)',
         ZFIN_FEATURE_BIND     : 'address feature stacks publish their ports on (default: 127.0.0.1)',
-        ZFIN_FEATURE_DOMAIN   : 'feature hostnames are <slug>.<this> (default: zfin.test)',
+        ZFIN_FEATURE_DOMAIN   : 'feature hostnames are <slug>.<this> (default: review.zfin.test)',
         ZFIN_PROXY_NETWORK    : 'the host\'s own nginx-proxy network for new stacks to join (default: z proxy\'s, while it runs)',
         ZFIN_PROXY_HTTP_PORT  : 'where `z proxy` listens for http, on ZFIN_FEATURE_BIND (default: 80)',
         ZFIN_PROXY_HTTPS_PORT : 'where `z proxy` listens for https, on ZFIN_FEATURE_BIND (default: 443)',
@@ -50,7 +50,7 @@ class StackConfig {
         ZFIN_TAR_IMAGE        : 'image that tars volumes (default: the compile image)',
     ]
 
-    static final String FEATURE_DOMAIN_DEFAULT = 'zfin.test'
+    static final String FEATURE_DOMAIN_DEFAULT = 'review.zfin.test'
 
     // The INSTANCE every stack this tooling makes generates its properties as (written into the
     // stack's .env by NewFeature and SeedBuild). Deliberately NOT an instance listed in the ZFIN

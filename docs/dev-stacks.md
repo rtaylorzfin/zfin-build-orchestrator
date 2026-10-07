@@ -192,7 +192,7 @@ each stack freezes what they were into its own `.env` when it is made:
 | setting | default | what it does |
 |---|---|---|
 | `ZFIN_FEATURE_BIND` | `127.0.0.1` | the address every published port binds to |
-| `ZFIN_FEATURE_DOMAIN` | `zfin.test` | stacks are named `<slug>.<domain>` |
+| `ZFIN_FEATURE_DOMAIN` | `review.zfin.test` | stacks are named `<slug>.<domain>` |
 | `ZFIN_PROXY_NETWORK` | unset | the host's own nginx-proxy network: stacks join it and advertise their name |
 | `ZFIN_PROXY_HTTP_PORT` / `ZFIN_PROXY_HTTPS_PORT` | `80` / `443` | where `z proxy` listens, on `ZFIN_FEATURE_BIND` |
 

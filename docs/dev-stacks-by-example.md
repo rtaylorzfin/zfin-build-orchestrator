@@ -220,11 +220,10 @@ gradle@3f1c0d9e2a7b:/opt/zfin/source_roots/zfin.org$ z status
 ## 3. How a stack is reached
 
 ```console
-# The repo runs no proxy. Every feature stack publishes httpd on its own port, 8443+N for its
-# offset N, on ZFIN_FEATURE_BIND. Nothing to set up; the URL is the port.
-14:52:00 ryan@mac:.../stacks/base$ grep -E '^ZFIN_(FEATURE|PROXY)' docker/.env
-ZFIN_FEATURE_DOMAIN=zfin.test
-ZFIN_FEATURE_BIND=127.0.0.1
+# Without a proxy, every feature stack publishes httpd on its own port, 8443+N for its offset N,
+# on ZFIN_FEATURE_BIND. Nothing to set up; the URL is the port.
+14:52:00 ryan@mac:.../stacks/base$ z config get ZFIN_FEATURE_BIND
+127.0.0.1
 14:52:05 ryan@mac:.../stacks/base$ curl -sk -o /dev/null -w '%{http_code}\n' https://127.0.0.1:8448/
 200
 ```
@@ -244,7 +243,7 @@ ngproxy_net
 >> seed: 2026-09-29
 ...
 >> allocated port offset +9  (skipped in use: 1, 2, 3, 4, 5, 6, 7, 8)
->> reach it at: https://127.0.0.1:8452  and https://zfin-3001.zfin.test via the proxy on network 'ngproxy_net'
+>> reach it at: https://127.0.0.1:8452  and https://zfin-3001.review.zfin.test via the proxy on network 'ngproxy_net'
 ...
 >> docker compose --project-name zfin-3001 ... -f .../docker-compose.overlay-feature.yml -f .../docker-compose.overlay-proxy-network.yml up -d db solr tomcat httpd
 ...
@@ -252,24 +251,24 @@ ngproxy_net
      worktree : /opt/zfin/source_roots/stacks/worktrees/zfin-3001
      branch   : zfin-3001  (off main)
      project  : zfin-3001
-     url      : https://zfin-3001.zfin.test   (direct: https://127.0.0.1:8452)
+     url      : https://zfin-3001.review.zfin.test   (direct: https://127.0.0.1:8452)
      ports    : https 127.0.0.1:8452   http 127.0.0.1:8089   db 127.0.0.1:5441   debug 127.0.0.1:5009   jenkins 127.0.0.1:9508
 ...
 14:57:10 ryan@mac:.../stacks/base$ docker inspect zfin-3001-httpd-1 --format '{{range .Config.Env}}{{println .}}{{end}}' | grep ^VIRTUAL_
-VIRTUAL_HOST=zfin-3001.zfin.test
+VIRTUAL_HOST=zfin-3001.review.zfin.test
 VIRTUAL_PORT=443
 VIRTUAL_PROTO=https
-14:57:20 ryan@mac:.../stacks/base$ curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: zfin-3001.zfin.test' http://127.0.0.1/
+14:57:20 ryan@mac:.../stacks/base$ curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: zfin-3001.review.zfin.test' http://127.0.0.1/
 200
 14:57:24 ryan@mac:.../stacks/base$ curl -sk -o /dev/null -w '%{http_code}\n' https://127.0.0.1:8452/
 200
 # A stack made without ZFIN_PROXY_NETWORK advertises nothing, so the proxy has no route for it.
-14:57:30 ryan@mac:.../stacks/base$ curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: zfin-12345.zfin.test' http://127.0.0.1/
+14:57:30 ryan@mac:.../stacks/base$ curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: zfin-12345.review.zfin.test' http://127.0.0.1/
 503
 14:57:40 ryan@mac:.../stacks/base$ cd ../worktrees/zfin-3001 && z status | head -4
 >> targeting 'zfin-3001' (zfin-3001)
 stack: zfin-3001
-  url      : https://zfin-3001.zfin.test
+  url      : https://zfin-3001.review.zfin.test
   direct   : https://127.0.0.1:8452
 ```
 
@@ -573,7 +572,7 @@ New feature stack -- press Enter to accept [defaults].
 >> plan: worktree + branch  ->  per-feature .env  ->  restore volumes from seed  ->  npm ci  ->  start db solr tomcat httpd  ->  gradle dirtydeploy  ->  tmux session 'zfin-12345'
 >> allocated port offset +5  (skipped in use: 1, 2, 3, 4)
 >> reach it at: https://127.0.0.1:8448
->> feature=zfin-12345 project=zfin-12345 host=zfin-12345.zfin.test ports=+5 tag=2026-09-29 base=main
+>> feature=zfin-12345 project=zfin-12345 host=zfin-12345.review.zfin.test ports=+5 tag=2026-09-29 base=main
 
 >> [1/7] worktree + branch
 Preparing worktree (new branch 'zfin-12345')
@@ -666,7 +665,7 @@ stack: zfin-12345
 # --- added by new-feature.groovy for zfin-12345 ---
 COMPOSE_PROJECT_NAME=zfin-12345
 DOCKER_SOURCE_ROOTS_PATH=/opt/zfin/source_roots/stacks/worktrees/zfin-12345
-DOCKER_VIRTUAL_HOST=zfin-12345.zfin.test
+DOCKER_VIRTUAL_HOST=zfin-12345.review.zfin.test
 ZFIN_PORT_OFFSET=5
 DOCKER_DB_PORT=127.0.0.1:5437
 DOCKER_JENKINS_HTTP_PORT=127.0.0.1:9504
@@ -774,7 +773,7 @@ stack: zfin-12345
 >> plan: worktree + branch  ->  per-feature .env  ->  restore volumes from seed  ->  start db solr tomcat httpd
 >> allocated port offset +6  (skipped in use: 1, 2, 3, 4, 5)
 >> reach it at: https://127.0.0.1:8449
->> feature=ZFIN-2001 project=zfin-2001 host=zfin-2001.zfin.test ports=+6 tag=2026-09-29 base=main
+>> feature=ZFIN-2001 project=zfin-2001 host=zfin-2001.review.zfin.test ports=+6 tag=2026-09-29 base=main
 
 >> [1/4] worktree + branch
 Preparing worktree (new branch 'ZFIN-2001')
@@ -849,7 +848,7 @@ teardown:
 >> plan: worktree (existing branch)  ->  per-feature .env  ->  restore volumes from seed  ->  start db solr tomcat httpd
 >> allocated port offset +7  (skipped in use: 1, 2, 3, 4, 5, 6)
 >> reach it at: https://127.0.0.1:8450
->> feature=review-pr project=review-pr host=review-pr.zfin.test ports=+7 tag=2026-09-29 branch=someones-branch (existing)
+>> feature=review-pr project=review-pr host=review-pr.review.zfin.test ports=+7 tag=2026-09-29 branch=someones-branch (existing)
 
 >> [1/4] worktree (existing branch)
 Preparing worktree (checking out 'someones-branch')
@@ -908,7 +907,7 @@ branch 'someones-branch' set up to track 'origin/someones-branch'.
 >> plan: worktree + branch  ->  per-feature .env  ->  restore volumes from seed  ->  start tomcat httpd
 >> allocated port offset +8  (skipped in use: 1, 2, 3, 4, 5, 6, 7)
 >> reach it at: https://127.0.0.1:8451
->> feature=ZFIN-2002 project=zfin-2002 host=zfin-2002.zfin.test ports=+8 tag=2026-09-29 base=main
+>> feature=ZFIN-2002 project=zfin-2002 host=zfin-2002.review.zfin.test ports=+8 tag=2026-09-29 base=main
 ...
 >> [3/4] restore volumes
 >>   [1/8] tls_certs            0 MB in   1.1s
