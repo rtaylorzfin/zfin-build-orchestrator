@@ -85,20 +85,12 @@ class StackConfig {
 
     static final String FEATURE_SOLR_MEM  = '6g'
     static final String FEATURE_SOLR_HEAP = '4g'
-    /** @param advertise  true when the stack joins an outside proxy's network
-     *                    (ZFIN_PROXY_NETWORK), so httpd should advertise its host there. */
-    static Map<String, String> featureEnv(String host, String gitCommon = null, String gitDir = null,
-                                          boolean advertise = false) {
-        [ DOCKER_EXTERNAL_VHOST: advertise ? host : '',  // present but EMPTY when not advertising:
-                                         // invisible to any nginx-proxy on the host, and asks acme
-                                         // for nothing. An ABSENT key falls back to
-                                         // DOCKER_VIRTUAL_HOST, and a stack no proxy can reach
-                                         // would advertise itself anyway (a 502 for its name).
-          DOCKER_SOLR_MEM_LIMIT: FEATURE_SOLR_MEM,   // prod sizing (16g/12g) will not start on a
+    static Map<String, String> featureEnv(String gitCommon = null, String gitDir = null) {
+        [ DOCKER_SOLR_MEM_LIMIT: FEATURE_SOLR_MEM,   // prod sizing (16g/12g) will not start on a
           DOCKER_SOLR_HEAP     : FEATURE_SOLR_HEAP, // host shared with other stacks
-          // Where this tree's git lives. The sidecar binds both at these exact paths -- a
+          // Where this tree's git lives. The containers bind both at these exact paths -- a
           // worktree's .git is a FILE pointing into the main repo, so git cannot work in a
-          // container that has only the worktree. See the git mounts in docker-compose.yml.
+          // container that has only the worktree. See docker-compose.overlay-worktree.yml.
           DOCKER_GIT_COMMON_DIR  : gitCommon,
           DOCKER_GIT_WORKTREE_DIR: gitDir ].findAll { k, v -> v != null }
     }

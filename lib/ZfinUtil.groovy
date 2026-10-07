@@ -1004,7 +1004,8 @@ chmod 644 "$C/zfin.org.crt" "$S/keystore"
 
     /** How a stack is reached, from its own .env:
      *  [direct: https://<bind>:<port>  (its published httpd port, when it has one),
-     *   vhost : https://<host>          (when it advertises one to an outside proxy),
+     *   vhost : https://<host>          (when it advertises one to an outside proxy: a checkout's
+     *                                    own stack, or one of ours that joined a proxy network),
      *   primary: vhost ?: direct]. A 0.0.0.0 bind is shown as localhost, the address a browser
      *  on this machine can use. */
     Map stackUrls(File envF) {
@@ -1015,8 +1016,10 @@ chmod 644 "$C/zfin.org.crt" "$S/keystore"
             def port = pub.substring(pub.lastIndexOf(':') + 1)
             direct = "https://${addr in ['0.0.0.0', ''] ? 'localhost' : addr}:${port}".toString()
         }
-        def declared = envF?.isFile() && envF.readLines().any { it.startsWith('DOCKER_EXTERNAL_VHOST=') }
-        def vh = declared ? envField(envF, 'DOCKER_EXTERNAL_VHOST') : envField(envF, 'DOCKER_VIRTUAL_HOST')
+        // Ours (the feature overlay) advertise nothing unless the proxy-network overlay follows.
+        def overlays = envField(envF, 'ZFIN_COMPOSE_OVERLAYS').tokenize(':')
+        def advertises = !overlays.any { it.contains('overlay-feature') } || overlays.any { it.contains('proxy-network') }
+        def vh = advertises ? envField(envF, 'DOCKER_VIRTUAL_HOST') : null
         def vhost = vh ? "https://$vh".toString() : null
         [direct: direct, vhost: vhost, primary: vhost ?: direct]
     }

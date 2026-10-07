@@ -93,9 +93,11 @@ class SeedBuild {
         // name, and `git worktree list` should say what this one is.
         def src = new File(stage, project)
         def baseEnv = new File(zfinUtil.DOCKER, '.env')
-        // Base compose plus the worktree overlay: the build runs in its own git worktree, and the
-        // ant build needs git. Colon-joined, as COMPOSE_FILE takes it (set below).
+        // Base compose plus the feature overlay (a stack of ours: no certbot/fail2ban, advertises
+        // nothing) and the worktree overlay (the build runs in its own git worktree, and the ant
+        // build needs git). Colon-joined, as COMPOSE_FILE takes it (set below).
         def composeFile = [new File(zfinUtil.DOCKER, 'docker-compose.yml'),
+                           new File(zfinUtil.COMPOSE, 'docker-compose.overlay-feature.yml'),
                            new File(zfinUtil.COMPOSE, 'docker-compose.overlay-worktree.yml')]*.absolutePath.join(':')
         def compose = ['docker', 'compose', '-p', project, '--env-file', envF.absolutePath] +
                       composeFile.tokenize(':').collectMany { ['-f', it] }
@@ -362,7 +364,6 @@ class SeedBuild {
                 COMPOSE_PROJECT_NAME    : project,
                 DOCKER_SOURCE_ROOTS_PATH: src.absolutePath,
                 DOCKER_VIRTUAL_HOST     : zfinUtil.featureHost(project),
-                DOCKER_EXTERNAL_VHOST   : '',
                 DOCKER_DB_PORT          : ephemeral,
                 DOCKER_SOLR_PORT        : ephemeral,
                 DOCKER_HTTPD_HTTP_PORT  : ephemeral,

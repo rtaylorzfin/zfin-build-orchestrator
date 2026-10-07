@@ -673,7 +673,6 @@ DOCKER_TOMCATDEBUG_PORT=127.0.0.1:5005
 DOCKER_HTTPD_HTTP_PORT=127.0.0.1:8085
 DOCKER_HTTPD_HTTPS_PORT=127.0.0.1:8448
 # feature stack -- see StackConfig.featureEnv (z feature refresh backfills these)
-DOCKER_EXTERNAL_VHOST=
 DOCKER_SOLR_MEM_LIMIT=6g
 DOCKER_SOLR_HEAP=4g
 DOCKER_GIT_COMMON_DIR=/opt/zfin/source_roots/stacks/base/.git

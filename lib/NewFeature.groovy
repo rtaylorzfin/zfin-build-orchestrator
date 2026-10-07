@@ -562,7 +562,6 @@ class NewFeature {
 //    StackConfig.FEATURE_INSTANCE for why every feature runs as the same, unlisted instance.
         step('per-feature .env')
         def owned = ['COMPOSE_PROJECT_NAME', 'DOCKER_SOURCE_ROOTS_PATH', 'DOCKER_VIRTUAL_HOST',
-                     'DOCKER_EXTERNAL_VHOST',
                      'DOCKER_SOLR_MEM_LIMIT', 'DOCKER_SOLR_HEAP',
                      'DOCKER_HTTPD_HTTP_PORT', 'DOCKER_HTTPD_HTTPS_PORT', 'DOCKER_DB_PORT',
                      'DOCKER_SOLR_PORT', 'DOCKER_JENKINS_HTTP_PORT', 'DOCKER_TOMCATDEBUG_PORT',
@@ -587,7 +586,7 @@ class NewFeature {
         // use. See StackConfig.featureEnv for what each is and why it must be present.
         outEnv << "# feature stack -- see StackConfig.featureEnv (z feature refresh backfills these)\n"
         def (gitCommon, gitDir) = zfinUtil.gitDirs(wt)
-        StackConfig.featureEnv(host, gitCommon, gitDir, proxyNet != null).each { k, v -> outEnv << "$k=$v\n" }
+        StackConfig.featureEnv(gitCommon, gitDir).each { k, v -> outEnv << "$k=$v\n" }
         if (useExisting) outEnv << "ZFIN_FEATURE_BRANCH_PREEXISTING=1\n"
 
         outEnv << "DOCKER_INSTANCE=${StackConfig.FEATURE_INSTANCE}\n"

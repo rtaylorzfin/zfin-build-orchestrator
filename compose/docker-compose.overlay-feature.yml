@@ -1,13 +1,23 @@
-# Every feature stack's overlay. `z feature new` records it in the stack's .env as
-# ZFIN_COMPOSE_OVERLAYS:
+# The overlay of every stack this tooling makes: each feature stack (`z feature new` records it
+# in the stack's .env as ZFIN_COMPOSE_OVERLAYS) and `z seed build`'s throwaway stack:
 #
 #   docker-compose.yml [+ docker-compose.overlay-shared-db.yml] + this [+ docker-compose.overlay-proxy-network.yml]
 #
 # Everything expressible as a VALUE lives in the stack's .env and is read by the base file:
-# published ports, DOCKER_EXTERNAL_VHOST for whether an outside proxy may route the stack, solr
-# sizing (StackConfig.featureEnv). What is left here is what a value cannot say: suppressing
-# services, and the Claude sidecar, which only a feature stack has.
+# published ports, solr sizing (StackConfig.featureEnv). What is left here is what a value cannot
+# say, or what the base file should not have to know about: suppressing services, not
+# advertising to a proxy, and the Claude sidecar.
 services:
+  # Advertise NOTHING to an outside nginx-proxy. The base file advertises DOCKER_VIRTUAL_HOST,
+  # which is right for an instance behind one; a stack of ours on a proxy's host would otherwise
+  # be published by that proxy without being on its network, and its name would answer 502.
+  # Empty is equivalent to unset: nginx-proxy and acme-companion both skip an empty value.
+  # docker-compose.overlay-proxy-network.yml, layered after this, advertises again for a stack
+  # that does join the proxy's network.
+  httpd:
+    environment:
+      VIRTUAL_HOST: ""
+      LETSENCRYPT_HOST: ""
   # certbot asks for a real certificate for the stack's hostname. A feature stack's name is not
   # publicly resolvable, so it fails on every `up` and reads as a failure in `docker ps -a`; an
   # outside proxy with acme-companion issues certificates itself if it can. Nothing depends on it.

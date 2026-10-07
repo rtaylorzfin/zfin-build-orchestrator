@@ -168,8 +168,7 @@ A stack is described entirely by its own `docker/.env`:
 | `COMPOSE_PROJECT_NAME` | which Docker project — and what makes the directory a stack at all |
 | `ZFIN_COMPOSE_OVERLAYS` | which compose overlays it was built with, `:`-separated |
 | `ZFIN_SEED` | the seed its volumes were restored from |
-| `DOCKER_VIRTUAL_HOST` | its hostname, `<slug>.<ZFIN_FEATURE_DOMAIN>`; the app builds its own URLs from it |
-| `DOCKER_EXTERNAL_VHOST` | the name it advertises to an outside proxy -- empty unless it joined one |
+| `DOCKER_VIRTUAL_HOST` | its hostname, `<slug>.<ZFIN_FEATURE_DOMAIN>`: the name an outside proxy routes, if it joined one |
 | `ZFIN_PORT_OFFSET` | its offset N for every published port |
 | `DOCKER_HTTPD_HTTPS_PORT` | where it is reached directly: `<bind>:8443+N` |
 
@@ -207,8 +206,9 @@ loops the admin paths and drops the `Secure` session cookie). Making the names r
 proxy -- wildcard DNS, dnsmasq, `/etc/hosts` -- is the host's business. `z feature new` refuses
 before creating anything when the network does not exist.
 
-A stack made WITHOUT the setting advertises nothing (`DOCKER_EXTERNAL_VHOST=` present but empty),
-so a proxy watching the Docker socket never publishes a route to a stack it cannot reach.
+A stack made WITHOUT the setting advertises nothing: the feature overlay clears httpd's
+`VIRTUAL_HOST`, so a proxy watching the Docker socket never publishes a route to a stack it
+cannot reach. The proxy-network overlay, layered after it, sets the name back.
 
 **TLS.** Every stack serves the same self-signed certificate: one per host and feature domain,
 covering `zfin.org`, `*.<domain>`, `localhost` and `127.0.0.1`. `z feature new` installs it into
