@@ -21,7 +21,7 @@ class StackConfig {
     static String compileImage(String release, String arch = '') { image('compile', release, arch) }
 
     // Feature hostnames are <slug>.<domain>. The domain is a DEFAULT here; resolution
-    // (docker/.env -> environment -> this) is ZfinUtil.featureDomain(). Each stack's host is
+    // (environment -> config file -> this) is ZfinUtil.featureDomain(). Each stack's host is
     // frozen into its own .env when it is made, so changing the default renames nothing.
     // The versions of the ZFIN repo's dev-stack hooks this tooling works with: the
     // `x-devstack-seams: N` its docker/docker-compose.yml declares (see ZfinUtil.checkSeams).

@@ -149,7 +149,8 @@ latency and fsync semantics will corrupt PGDATA.
 ## What is deliberately NOT here
 
 **Credentials.** The Claude sidecar token lives at `~/.zfin/claude-token`
-(`ZFIN_CLAUDE_TOKEN_FILE`), under `$HOME` rather than in this tree. On a shared host the dev
+(`ZFIN_CLAUDE_TOKEN_FILE`), and the development TLS certificate's key beside the config file
+(`z cert`), both under `$HOME` rather than in this tree. On a shared host the dev
 tree is group-writable so developers can collaborate on worktrees — a credential there would
 hand one person's subscription to everyone with an account.
 

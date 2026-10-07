@@ -92,6 +92,7 @@ Seeds (a loaded stack's volumes, captured once and restored into many):
                                          throwaway stack, capture it, tear it down
   z shell-init [bash|zsh]                shell lines to put `z` on PATH + enable completion
   z config [ls|get|set|unset|path]       this host's settings (worktree/archive dirs, proxy, ...)
+  z cert [install [<ticket>]]            the host's dev TLS certificate: where it is, how to trust it
   z seed restore [<tag>] [--app]         restore a seed into THIS stack (e.g. the base checkout's)
   z seed ls / z seed rm <tag>            list / delete seeds
 
@@ -132,6 +133,7 @@ switch (cmd) {
         runCmd('Seed', rest); break
     case 'shell-init':    runCmd('ShellInit', rest); break
     case 'config':        runCmd('Config', rest); break
+    case 'cert':          runCmd('Cert', rest); break
 
     // feature ops
     case 'feature':

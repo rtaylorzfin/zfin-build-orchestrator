@@ -53,11 +53,8 @@ services:
       # again with a valid token already present. Point it at the mounted volume and onboarding
       # happens once.
       CLAUDE_CONFIG_DIR: /home/gradle/.claude
-      # Serves no TLS, so it needs no cert -- and mounting tls_certs to persist one would hand
-      # it the stack's private key for nothing.
-      ZFIN_SKIP_CERT_SETUP: "true"
       # Lets a session identify itself rather than infer it: /.dockerenv proves "a container",
-      # this proves "the ZFIN sidecar", where `z`/`zrun` are host commands and refuse.
+      # this proves "the ZFIN sidecar", where `z` is a host command and refuses.
       ZFIN_SIDECAR: "true"
     volumes:
       # The one feature worktree, read-write -- the point of the thing.
@@ -94,11 +91,8 @@ services:
       # database -- which the agent can already read directly over the compose network. Nothing
       # here reaches another stack, the host, or a remote.
       - jenkins_data:/opt/zfin/www_homes/zfin.org/server_apps/jenkins/jenkins-home
-      - keystore:/opt/apache/apache-tomcat/conf
-      # generate_base.sh's cert steps are guarded by `if [ ! -f ]`; they re-ran on every entry
-      # only because without this mount the cert landed in the throwaway layer. Mounting it
-      # makes the guard work.
-      - tls_certs:/opt/zfin/tls
+      # No tls_certs or keystore: they hold the stack's TLS private key, and the sidecar serves
+      # no TLS (its profile does not run generate_base.sh; see compose/claude/Dockerfile).
       - static_data:/opt/zfin/static
       - maven_cache:/home/gradle/.m2
       - gradle_cache:/home/gradle/.gradle

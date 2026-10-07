@@ -42,20 +42,12 @@ COPY CLAUDE.sidecar.md /opt/zfin/claude-defaults/CLAUDE.md
 RUN chmod 0755 /opt/zfin/claude-defaults/block-push.sh \
     && chown -R gradle /opt/zfin/claude-defaults
 
-# The inherited compile profile runs generate_base.sh on EVERY login shell, which does
-# `mkdir -p /mnt/research/vol/{archive,blast,central,prod,unloads,users}`. In `compile` that
-# works because ${DOCKER_RESEARCH_PATH} is bind-mounted there; this service deliberately does
-# NOT mount it -- /mnt/research is a large shared filesystem carrying production unloads, and
-# handing it to an agent running with skipped permissions is exactly the blast radius the
-# sidecar exists to shrink. So create the directories empty and owned by the user, which makes
-# those mkdirs silent no-ops instead of six "Permission denied" lines on every entry.
-#
-# The /research/z* symlinks the base image sets up therefore point at empty directories here.
-# That is honest: there is no research share in this container. The tasks that would use it
-# (gradle getdb/getsolr) already cannot run from a credential-free container anyway.
-RUN mkdir -p /mnt/research/vol/archive /mnt/research/vol/blast /mnt/research/vol/central \
-             /mnt/research/vol/prod /mnt/research/vol/unloads /mnt/research/vol/users \
-    && chown -R gradle /mnt/research
+# The inherited compile profile runs generate_base.sh on every login shell: it creates the
+# stack's TLS key and certificate, the Postgres password file and /mnt/research directories.
+# The sidecar needs none of them -- it serves no TLS, and the stack's own compile container
+# has already made the rest -- and running it here would mean mounting the volumes that hold
+# the stack's private key. So the sidecar's profile does not call it.
+RUN sed -i '\#docker/compile/generate_base.sh#d' /home/gradle/.profile
 
 # Create ~/.claude in the IMAGE, owned by gradle, before the claude_home volume mounts over
 # it. Docker seeds a new named volume from the image's content at that path -- including its

@@ -857,6 +857,82 @@ class ZfinUtil {
                    values.collect { k, v -> "$k=${v ?: ''}" }.join('\n') + '\n'
     }
 
+    // ---- the host's development TLS certificate ----------------------------------------------
+    // ONE self-signed certificate per host and feature domain, installed into every stack this
+    // tooling makes, so trusting it once (z cert) covers every stack. Left to themselves, the
+    // stack's compile container would make each stack its own (generate_base.sh in the ZFIN
+    // repo), and a certificate trusted for one stack would not cover the next. That script only
+    // creates files that are missing, so a stack that already has these keeps them.
+
+    /** Where the host certificate lives: beside the config file, per user, per domain. */
+    File devCertDir() { new File(configFile().parentFile, "dev-cert/${featureDomain()}") }
+
+    private String compileImageName() { StackConfig.compileImage(env('ZFIN_RELEASE'), env('DOCKER_ARCH', '')) }
+
+    private static final String DEV_CERT_SCRIPT = '''
+set -e
+cd /out
+openssl req -x509 -newkey rsa:2048 -nodes -days 825 \\
+  -subj "/C=US/ST=Oregon/L=Eugene/O=University of Oregon/OU=ZFIN/CN=zfin.org" \\
+  -addext "subjectAltName=DNS:zfin.org,DNS:*.${DOMAIN},DNS:${DOMAIN},DNS:localhost,IP:127.0.0.1" \\
+  -addext "extendedKeyUsage=serverAuth" \\
+  -keyout zfin.org.key -out zfin.org.crt 2>/dev/null
+chmod 600 zfin.org.key
+chmod 644 zfin.org.crt
+chown "$OWNER" zfin.org.key zfin.org.crt
+'''
+
+    /** The host certificate's directory, creating the certificate on first use. Made inside the
+     *  compile image (openssl), so the host needs no tooling of its own; 825 days, the longest
+     *  validity browsers accept for a certificate you trust by hand. */
+    File ensureDevCert() {
+        def dir = devCertDir()
+        if (new File(dir, 'zfin.org.crt').isFile() && new File(dir, 'zfin.org.key').isFile()) return dir
+        dir.mkdirs()
+        def owner = "${captureOutput(['id', '-u'])}:${captureOutput(['id', '-g'])}".toString()
+        info("creating this host's development certificate (zfin.org, *.${featureDomain()}, localhost) in $dir")
+        runCommand(['docker', 'run', '--rm', '-u', '0', '--entrypoint', 'bash',
+                    '-e', "DOMAIN=${featureDomain()}".toString(), '-e', "OWNER=$owner".toString(),
+                    '-v', "${dir.absolutePath}:/out".toString(), compileImageName(), '-c', DEV_CERT_SCRIPT])
+        dir
+    }
+
+    private static final String DEV_CERT_INSTALL_SCRIPT = '''
+set -e
+C=/opt/zfin/tls/certs; K=/opt/zfin/tls/private; S=/opt/apache/apache-tomcat/conf
+mkdir -p "$C" "$K"
+cp /devcert/zfin.org.crt "$C/zfin.org.crt"
+cp /devcert/zfin.org.key "$K/zfin.org.key"
+rm -f "$C/zfin.org.p12" "$S/keystore"
+openssl pkcs12 -export -name tomcat -in "$C/zfin.org.crt" -inkey "$K/zfin.org.key" \\
+  -password pass:changeit -out "$C/zfin.org.p12"
+keytool -importkeystore -noprompt -destkeystore "$S/keystore" -srckeystore "$C/zfin.org.p12" \\
+  -srcstoretype pkcs12 -alias tomcat -srcstorepass changeit -deststorepass changeit >/dev/null 2>&1
+chown -R 1000:1000 /opt/zfin/tls "$S/keystore"
+chmod 600 "$K/zfin.org.key" "$C/zfin.org.p12"
+chmod 644 "$C/zfin.org.crt" "$S/keystore"
+'''
+
+    /** Install the host certificate into `project`'s tls_certs (httpd) and keystore (tomcat)
+     *  volumes, replacing what is there, as the same files generate_base.sh would write. A
+     *  missing volume is created with compose's labels so compose adopts it; mounting it into
+     *  the compile image first seeds it with that image's content, as compose would. Running
+     *  containers read the files at start: restart httpd and tomcat to pick them up. */
+    boolean installDevCert(String project) {
+        def dir = ensureDevCert()
+        ['tls_certs', 'keystore'].each { vn ->
+            def vol = "${project}_${vn}".toString()
+            if (!volumeExists(vol))
+                runQuietly(['docker', 'volume', 'create', '--label', "com.docker.compose.project=$project",
+                            '--label', "com.docker.compose.volume=$vn", vol])
+        }
+        runCommand(['docker', 'run', '--rm', '-u', '0', '--entrypoint', 'bash',
+                    '-v', "${project}_tls_certs:/opt/zfin/tls".toString(),
+                    '-v', "${project}_keystore:/opt/apache/apache-tomcat/conf".toString(),
+                    '-v', "${dir.absolutePath}:/devcert:ro".toString(), compileImageName(), '-c', DEV_CERT_INSTALL_SCRIPT],
+                   [check: false]) == 0
+    }
+
     /** Make sure `project`'s build-cache volumes exist and belong to the compile container's
      *  user. Images built before they created /home/gradle/.npm and .m2 have nothing at those
      *  mount points, so Docker makes a fresh volume root-owned and the first npm install fails

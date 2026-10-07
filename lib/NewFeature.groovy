@@ -658,6 +658,13 @@ class NewFeature {
         // Caches the seed did not carry start as empty volumes; see prepareCacheVolumes.
         zfinUtil.prepareCacheVolumes(project)
 
+        // The host's development certificate, replacing whatever the seed carried, so one
+        // trusted certificate covers every stack (z cert). Not fatal: without it the stack
+        // still serves, with the certificate its compile container makes.
+        step('TLS certificate')
+        if (!zfinUtil.installDevCert(project))
+            System.err.println("!! could not install the host certificate; the stack makes its own. Retry: z cert install $slug")
+
 // node_modules is git-ignored (absent in a fresh worktree) and NOT in the warm TARGETROOT,
 // and `gradle dirtydeploy` runs npmBuild (webpack) WITHOUT npmInstall -- so a fresh worktree
 // needs `npm ci` once or dirtydeploy fails with "webpack: not found". Do it in the compile

@@ -210,6 +210,15 @@ before creating anything when the network does not exist.
 A stack made WITHOUT the setting advertises nothing (`DOCKER_EXTERNAL_VHOST=` present but empty),
 so a proxy watching the Docker socket never publishes a route to a stack it cannot reach.
 
+**TLS.** Every stack serves the same self-signed certificate: one per host and feature domain,
+covering `zfin.org`, `*.<domain>`, `localhost` and `127.0.0.1`. `z feature new` installs it into
+the stack's `tls_certs` (httpd) and `keystore` (tomcat) volumes, so trusting it once covers every
+stack. `z cert` prints where it is and how to trust it; `z cert install [<ticket>]` puts it into a
+stack made before it existed (then `z restart httpd tomcat`). It lives beside the config file,
+under `~/.config/zfin-build-orchestrator/dev-cert/<domain>/`. A stack without it serves the
+certificate its own compile container makes (the ZFIN repo's `generate_base.sh`), which differs
+per stack.
+
 ---
 
 ## Everyday workflow
