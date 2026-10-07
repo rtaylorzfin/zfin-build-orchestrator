@@ -93,6 +93,7 @@ Seeds (a loaded stack's volumes, captured once and restored into many):
   z shell-init [bash|zsh]                shell lines to put `z` on PATH + enable completion
   z config [ls|get|set|unset|path]       this host's settings (worktree/archive dirs, proxy, ...)
   z cert [install [<ticket>]]            the host's dev TLS certificate: where it is, how to trust it
+  z proxy up|down|status|attach          serve every feature stack at https://<slug>.<domain>
   z seed restore [<tag>] [--app]         restore a seed into THIS stack (e.g. the base checkout's)
   z seed ls / z seed rm <tag>            list / delete seeds
 
@@ -134,6 +135,7 @@ switch (cmd) {
     case 'shell-init':    runCmd('ShellInit', rest); break
     case 'config':        runCmd('Config', rest); break
     case 'cert':          runCmd('Cert', rest); break
+    case 'proxy':         runCmd('ProxyStack', rest); break
 
     // feature ops
     case 'feature':

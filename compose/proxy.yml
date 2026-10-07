@@ -1,0 +1,43 @@
+# The reverse proxy `z proxy` runs: serves every feature stack by name, as
+# https://<slug>.<ZFIN_FEATURE_DOMAIN>, on one address. Its own Compose project (zfin_proxy).
+#
+# Only for a host that does not already run one. Where a proxy exists -- ZFIN's ngproxy on the
+# shared VMs -- stacks join ITS network instead (the ZFIN_PROXY_NETWORK setting), and this
+# never starts: two nginx-proxies watching one Docker socket would both claim every stack.
+# That rule is what lets this be stock nginx-proxy, unmodified.
+#
+# Discovery: nginx-proxy reads VIRTUAL_HOST/VIRTUAL_PROTO/VIRTUAL_PORT off the containers on its
+# network. A feature stack's httpd advertises its name there only when
+# docker-compose.overlay-proxy-network.yml is layered on (z feature new and z proxy attach add
+# it); docker-compose.overlay-feature.yml clears it otherwise.
+#
+# TLS: the host development certificate (z cert) for every stack. nginx-proxy picks the
+# certificate whose name is the closest suffix of the host, so <domain>.crt covers every
+# <slug>.<domain>; default.crt answers anything else. Traffic to httpd stays https
+# (VIRTUAL_PROTO=https), which is what keeps the `Secure` session cookie and httpd's admin
+# paths working.
+#
+# The Docker socket: nginx-proxy watches it to discover stacks. `:ro` makes the socket FILE
+# read-only; it does not limit what can be asked of the daemon, so this container can control
+# Docker. That is how nginx-proxy runs everywhere, and it is a host-side container running no
+# build or agent code -- but it is the one container here that holds the socket.
+#
+# Every value comes from z (lib/ProxyStack.groovy), which sets them for the compose run.
+services:
+  proxy:
+    image: nginxproxy/nginx-proxy:1.11-alpine
+    restart: unless-stopped
+    ports:
+      - "${ZFIN_PROXY_BIND}:${ZFIN_PROXY_HTTP_PORT}:80"
+      - "${ZFIN_PROXY_BIND}:${ZFIN_PROXY_HTTPS_PORT}:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ${ZFIN_PROXY_CERT_DIR}/zfin.org.crt:/etc/nginx/certs/${ZFIN_FEATURE_DOMAIN}.crt:ro
+      - ${ZFIN_PROXY_CERT_DIR}/zfin.org.key:/etc/nginx/certs/${ZFIN_FEATURE_DOMAIN}.key:ro
+      - ${ZFIN_PROXY_CERT_DIR}/zfin.org.crt:/etc/nginx/certs/default.crt:ro
+      - ${ZFIN_PROXY_CERT_DIR}/zfin.org.key:/etc/nginx/certs/default.key:ro
+    networks: [proxy]
+
+networks:
+  proxy:
+    name: zfin_proxy      # fixed: feature stacks join it as `external`

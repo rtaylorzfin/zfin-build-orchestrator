@@ -302,12 +302,13 @@ class NewFeature {
 
 // --shared-db: this feature runs NO local db/solr (see docker-compose.overlay-shared-db.yml), so it
 // doesn't need a seed -- it needs the shared data stack up (its external network).
-        // An outside proxy is optional. When docker/.env names its network it must exist NOW:
+        // A proxy is optional: the host's own (ZFIN_PROXY_NETWORK) or `z proxy`'s, while it runs.
+        // When one is named, its network must exist NOW:
         // `external: true` fails at `up`, after the worktree, .env and volumes already exist.
         def proxyNet = zfinUtil.proxyNetwork()
         if (proxyNet && zfinUtil.runQuietly(['docker', 'network', 'inspect', proxyNet]) != 0)
             die("ZFIN_PROXY_NETWORK=$proxyNet, but there is no such Docker network.\n" +
-                "   Start the proxy that owns it, or unset ZFIN_PROXY_NETWORK (z config unset ZFIN_PROXY_NETWORK) to\n" +
+                "   Start the proxy that owns it (z proxy up, for z's own), or unset ZFIN_PROXY_NETWORK to\n" +
                 "   reach stacks on their published ports only. Nothing was created.")
 
         if (doSharedDb) {
@@ -605,6 +606,9 @@ class NewFeature {
         // One line rather than a copied bundle of compose files, which could silently fall
         // behind the tooling it was copied from.
         outEnv << "ZFIN_COMPOSE_OVERLAYS=${overlays.join(':')}\n"
+        // The network the proxy-network overlay names. Recorded per stack: it is what this stack
+        // joined, and every later compose run on it must interpolate the same name.
+        if (proxyNet) outEnv << "ZFIN_PROXY_NETWORK=${proxyNet}\n"
         if (tag) outEnv << "ZFIN_SEED=$tag\n"
         // A feature's tree is always a worktree, so it also gets the git mounts (stackSpec adds
         // the same overlay on every later command, from the tree itself).

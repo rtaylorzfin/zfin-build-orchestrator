@@ -193,7 +193,8 @@ each stack freezes what they were into its own `.env` when it is made:
 |---|---|---|
 | `ZFIN_FEATURE_BIND` | `127.0.0.1` | the address every published port binds to |
 | `ZFIN_FEATURE_DOMAIN` | `zfin.test` | stacks are named `<slug>.<domain>` |
-| `ZFIN_PROXY_NETWORK` | unset | an outside nginx-proxy's network: stacks join it and advertise their name |
+| `ZFIN_PROXY_NETWORK` | unset | the host's own nginx-proxy network: stacks join it and advertise their name |
+| `ZFIN_PROXY_HTTP_PORT` / `ZFIN_PROXY_HTTPS_PORT` | `80` / `443` | where `z proxy` listens, on `ZFIN_FEATURE_BIND` |
 
 **Directly.** Every stack publishes httpd at `https://<bind>:8443+N` (and `http` 8080+N). Nothing
 to set up. Relative links, which are most of them, work. A stack runs as the `feature` instance,
@@ -201,12 +202,28 @@ which the ZFIN repo's `all-properties.yml` does not list, so it gets the develop
 `DOMAIN_NAME` is `zfin.org`, and the few absolute links the app builds -- mostly in mail --
 point at production. That mail goes to the stack's mailpit (`SMTP_HOST=mailpit`), never out.
 
+**By name, through `z proxy`.** On a host with no proxy of its own:
+
+```bash
+z proxy up          # stock nginx-proxy (compose/proxy.yml) on ZFIN_FEATURE_BIND, ports 80/443
+```
+
+New stacks join its network and are served at `https://<slug>.<domain>`, with the host
+development certificate (`z cert`), so the names need no browser exception once it is trusted.
+A stack made before the proxy ran joins with `z proxy attach <ticket>` (or `--all`), which adds
+the proxy-network overlay to its `.env` and recreates its httpd. `z proxy status` lists what it
+routes; `z proxy down` stops it, and stacks stay reachable directly. The names must resolve to
+the proxy: `up` and `status` check, and print the dnsmasq lines when they do not -- on macOS,
+`address=/<domain>/127.0.0.1` in dnsmasq plus `/etc/resolver/<domain>`, once per host.
+
 **Through a proxy the host already runs.** Set `ZFIN_PROXY_NETWORK` to a network that proxy
-watches. A stack made after that adds `docker-compose.overlay-proxy-network.yml` and advertises
+watches, and leave `z proxy` down: two nginx-proxies on one Docker socket would both claim every
+stack. A stack made after that adds `docker-compose.overlay-proxy-network.yml` and advertises
 `VIRTUAL_HOST=<slug>.<domain>` (`VIRTUAL_PROTO=https`, `VIRTUAL_PORT=443`: plain http to httpd
 loops the admin paths and drops the `Secure` session cookie). Making the names resolve to that
 proxy -- wildcard DNS, dnsmasq, `/etc/hosts` -- is the host's business. `z feature new` refuses
-before creating anything when the network does not exist.
+before creating anything when the network does not exist. Either way, the network a stack
+joined is recorded in its `.env` (`ZFIN_PROXY_NETWORK`), since every compose run on it names it.
 
 A stack made WITHOUT the setting advertises nothing: the feature overlay clears httpd's
 `VIRTUAL_HOST`, so a proxy watching the Docker socket never publishes a route to a stack it

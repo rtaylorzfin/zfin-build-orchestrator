@@ -5,7 +5,7 @@ _z_complete() {
     local cur sub argstart=2
     cur="${COMP_WORDS[COMP_CWORD]}"
     if (( COMP_CWORD == 1 )); then
-        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status build feature seed shared scaffold fresh-install shell-init config cert help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status build feature seed shared scaffold fresh-install shell-init config cert proxy help" -- "$cur") )
         return
     fi
     sub="${COMP_WORDS[1]}"
@@ -32,11 +32,12 @@ _z_complete() {
         scaffold)                  COMPREPLY=( $(compgen -W "--root --no-mounts --dry-run" -- "$cur") ) ;;
         shell-init)                COMPREPLY=( $(compgen -W "bash zsh" -- "$cur") ) ;;
         cert)                      COMPREPLY=( $(compgen -W "show install" -- "$cur") ) ;;
+        proxy)                     COMPREPLY=( $(compgen -W "up down status attach --all" -- "$cur") ) ;;
         config)
             if (( COMP_CWORD == argstart )); then
                 COMPREPLY=( $(compgen -W "ls get set unset path" -- "$cur") )
             else
-                COMPREPLY=( $(compgen -W "ZFIN_DEV_ROOT ZFIN_WORKTREES_DIR ZFIN_ARCHIVE_DIR ZFIN_CACHE_DIR ZFIN_SEED ZFIN_FEATURE_BIND ZFIN_FEATURE_DOMAIN ZFIN_PROXY_NETWORK ZFIN_SHARED_PROJECT ZFIN_CLAUDE_TOKEN_FILE ZFIN_TAR_IMAGE" -- "$cur") )
+                COMPREPLY=( $(compgen -W "ZFIN_DEV_ROOT ZFIN_WORKTREES_DIR ZFIN_ARCHIVE_DIR ZFIN_CACHE_DIR ZFIN_SEED ZFIN_FEATURE_BIND ZFIN_FEATURE_DOMAIN ZFIN_PROXY_NETWORK ZFIN_PROXY_HTTP_PORT ZFIN_PROXY_HTTPS_PORT ZFIN_SHARED_PROJECT ZFIN_CLAUDE_TOKEN_FILE ZFIN_TAR_IMAGE" -- "$cur") )
             fi ;;
         feature)
             if (( COMP_CWORD == argstart )); then

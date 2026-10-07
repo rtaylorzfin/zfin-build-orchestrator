@@ -20,4 +20,5 @@ git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git ~/zfin-dev/zfin
 | `lib/` | one class per command, plus `ZfinUtil` (helpers, roots) and `StackConfig` (ZFIN policy) |
 | `compose/` | compose overlays layered on the ZFIN checkout's base file, and the sidecar's build context |
 | `check` | compiles every command class; run it after editing `lib/` |
+| `compose/proxy.yml` | the reverse proxy `z proxy up` runs: every stack at `https://<slug>.zfin.test` |
 | `docs/` | [dev-stacks.md](docs/dev-stacks.md) to start; [dev-stacks-by-example.md](docs/dev-stacks-by-example.md) as terminal sessions |

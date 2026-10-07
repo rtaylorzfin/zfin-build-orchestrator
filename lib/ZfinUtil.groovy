@@ -1050,7 +1050,7 @@ chmod 644 "$C/zfin.org.crt" "$S/keystore"
     String featureBind() { setting('ZFIN_FEATURE_BIND', '127.0.0.1') }
 
     /** The external Docker network an outside nginx-proxy watches, or null to route nothing. */
-    String proxyNetwork() { setting('ZFIN_PROXY_NETWORK', '') ?: null }
+    String proxyNetwork() { setting('ZFIN_PROXY_NETWORK', '') ?: (ProxyStack.running(this) ? ProxyStack.NETWORK : null) }
 
     /** How a stack is reached, from its own .env:
      *  [direct: https://<bind>:<port>  (its published httpd port, when it has one),
