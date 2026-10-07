@@ -23,10 +23,11 @@ class StackConfig {
     // Feature hostnames are <slug>.<domain>. The domain is a DEFAULT here; resolution
     // (environment -> config file -> this) is ZfinUtil.featureDomain(). Each stack's host is
     // frozen into its own .env when it is made, so changing the default renames nothing.
-    // The versions of the ZFIN repo's dev-stack hooks this tooling works with: the
-    // `x-devstack-seams: N` its docker/docker-compose.yml declares (see ZfinUtil.checkSeams).
+    // The versions of the ZFIN repo's compose file this tooling works with: the
+    // `x-zfin-compose-version: N` its docker/docker-compose.yml declares (see
+    // ZfinUtil.checkComposeVersion).
     // Add a version here once the tooling handles it; drop one once no checkout still has it.
-    static final List<Integer> SEAMS_SUPPORTED = [1]
+    static final List<Integer> COMPOSE_VERSIONS_SUPPORTED = [1]
 
     // HOST SETTINGS: how this host runs the tooling, as opposed to what a stack is. They live in
     // the tool's own config file (ZfinUtil.configFile), never in a ZFIN checkout's docker/.env

@@ -60,42 +60,43 @@ class ZfinUtil {
         if (!r || !new File(r, 'docker/docker-compose.yml').isFile())
             die(explicit ? "ZFIN_REPO=$explicit is not a ZFIN checkout (no docker/docker-compose.yml there)"
                          : "not inside a ZFIN checkout -- cd into one (or a feature worktree), or set ZFIN_REPO")
-        checkSeams(r.canonicalFile)
+        checkComposeVersion(r.canonicalFile)
         repoCache = r.canonicalFile
     }
 
-    /** The version of the dev-stack hooks a ZFIN checkout provides: the top-level
-     *  `x-devstack-seams: N` in its docker/docker-compose.yml, or null when it declares none.
+    /** The version of a ZFIN checkout's compose file, as the interface this tooling depends on:
+     *  the top-level `x-zfin-compose-version: N` in its docker/docker-compose.yml, or null when
+     *  it declares none.
      *  Read as a line rather than parsed as YAML: it is one key, and the tool has no YAML
      *  dependency to spend on it. */
-    Integer seamsVersion(File repo) {
+    Integer composeVersion(File repo) {
         for (line in new File(repo, 'docker/docker-compose.yml').readLines()) {
-            def m = line =~ /^x-devstack-seams:\s*(\d+)\s*(#.*)?$/
+            def m = line =~ /^x-zfin-compose-version:\s*(\d+)\s*(#.*)?$/
             if (m.matches()) return m.group(1) as Integer
         }
         null
     }
 
-    /** Refuse a checkout whose hooks this tooling does not know. The tooling relies on
-     *  variables and services that live in the ZFIN repo, which changes
-     *  on its own schedule; without this, a mismatch surfaces as a compose error or a stack
-     *  that starts subtly wrong. ZFIN_SKIP_SEAMS_CHECK=1 proceeds anyway, with a warning. */
-    void checkSeams(File repo) {
-        def v = seamsVersion(repo)
-        if (v in StackConfig.SEAMS_SUPPORTED) return
+    /** Refuse a checkout whose compose version this tooling does not know. The tooling relies
+     *  on variables and services that live in the ZFIN repo, which changes on its own schedule;
+     *  without this, a mismatch surfaces as a compose error or a stack that starts subtly
+     *  wrong. ZFIN_SKIP_COMPOSE_VERSION_CHECK=1 proceeds anyway, with a warning. */
+    void checkComposeVersion(File repo) {
+        def v = composeVersion(repo)
+        if (v in StackConfig.COMPOSE_VERSIONS_SUPPORTED) return
         def problem = v == null
-            ? "${repo} declares no x-devstack-seams in docker/docker-compose.yml, so it predates the\n" +
-              "   hooks this tooling relies on. Update that checkout to a ZFIN main that has them."
-            : (v > StackConfig.SEAMS_SUPPORTED.max()
-                ? "${repo} declares dev-stack hooks version ${v}; this tooling supports " +
-                  "${StackConfig.SEAMS_SUPPORTED.join(', ')}.\n   Update the tooling:  git -C ${HOME} pull"
-                : "${repo} declares dev-stack hooks version ${v}, which this tooling no longer supports " +
-                  "(${StackConfig.SEAMS_SUPPORTED.join(', ')}).\n   Update that checkout, or use an older checkout of the tooling.")
-        if (System.getenv('ZFIN_SKIP_SEAMS_CHECK') == '1') {
-            System.err.println("!! ${problem}\n   ZFIN_SKIP_SEAMS_CHECK=1: continuing anyway.")
+            ? "${repo} declares no x-zfin-compose-version in docker/docker-compose.yml,\n" +
+              "   so it predates the hooks this tooling relies on. Update that checkout to a ZFIN main that has them."
+            : (v > StackConfig.COMPOSE_VERSIONS_SUPPORTED.max()
+                ? "${repo} declares compose version ${v}; this tooling supports " +
+                  "${StackConfig.COMPOSE_VERSIONS_SUPPORTED.join(', ')}.\n   Update the tooling:  git -C ${HOME} pull"
+                : "${repo} declares compose version ${v}, which this tooling no longer supports " +
+                  "(${StackConfig.COMPOSE_VERSIONS_SUPPORTED.join(', ')}).\n   Update that checkout, or use an older checkout of the tooling.")
+        if (System.getenv('ZFIN_SKIP_COMPOSE_VERSION_CHECK') == '1') {
+            System.err.println("!! ${problem}\n   ZFIN_SKIP_COMPOSE_VERSION_CHECK=1: continuing anyway.")
             return
         }
-        die(problem + "\n   (ZFIN_SKIP_SEAMS_CHECK=1 proceeds anyway, at your own risk.)")
+        die(problem + "\n   (ZFIN_SKIP_COMPOSE_VERSION_CHECK=1 proceeds anyway, at your own risk.)")
     }
     /** The ZFIN checkout's docker/ directory: the base compose file and base .env. */
     File getDOCKER() { new File(getREPO(), 'docker') }

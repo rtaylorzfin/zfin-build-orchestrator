@@ -31,11 +31,12 @@ are kept in the tool's own config file and managed with `z config`; see
 [dev-tree-layout.md](dev-tree-layout.md#configuration). A ZFIN checkout's `docker/.env` holds
 only what its stack is (`ZFIN_RELEASE`, the `DOCKER_*` paths and ports).
 
-**Version check.** The ZFIN repo's `docker/docker-compose.yml` declares which set of dev-stack
-hooks it provides, as `x-devstack-seams: N`, and `StackConfig.SEAMS_SUPPORTED` lists the
-versions this tooling works with. `z` refuses a checkout outside that list the first time it
-resolves one: a checkout with no marker predates the hooks (update it), and a newer one needs
-newer tooling (`git pull` here). `ZFIN_SKIP_SEAMS_CHECK=1` proceeds anyway, with a warning.
+**Version check.** The ZFIN repo's `docker/docker-compose.yml` declares its version as an
+interface this tooling depends on, `x-zfin-compose-version: N`, and
+`StackConfig.COMPOSE_VERSIONS_SUPPORTED` lists the versions this tooling works with. `z` refuses
+a checkout outside that list the first time it resolves one: a checkout with no marker predates
+the hooks this tooling needs (update it), and a newer one needs newer tooling (`git pull` here).
+`ZFIN_SKIP_COMPOSE_VERSION_CHECK=1` proceeds anyway, with a warning.
 
 ---
 
