@@ -17,7 +17,7 @@
 //
 // REACHING THE STACKS. The repo runs no proxy. Every feature stack publishes httpd on its
 // own port (https://127.0.0.1:8443+N), which needs nothing set up. To serve them by name
-// instead, point ZFIN_PROXY_NETWORK in docker/.env at the network an nginx-proxy on this host
+// instead, point the ZFIN_PROXY_NETWORK host setting (z config) at the network an nginx-proxy on this host
 // watches; the stacks then join it and advertise <slug>.<ZFIN_FEATURE_DOMAIN>, and names
 // resolving to that proxy are the host's business (a wildcard DNS record, dnsmasq, or
 // /etc/hosts).

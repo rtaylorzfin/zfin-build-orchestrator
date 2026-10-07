@@ -41,7 +41,7 @@ class SharedStack {
         }
 
         // Seed selection mirrors new-feature: --seed > $ZFIN_SEED > newest seed on this host.
-        def tag = tagArg ?: System.getenv('ZFIN_SEED') ?: zfinUtil.newestSeed()
+        def tag = tagArg ?: zfinUtil.setting('ZFIN_SEED') ?: zfinUtil.newestSeed()
         // A seed from another platform restores a PostgreSQL data directory this host cannot
         // safely use. Refused rather than warned: the failure is silent wrong answers, so a
         // warning in a long provisioning log is not enough.

@@ -77,7 +77,7 @@ class ZfinUtil {
     }
 
     /** Refuse a checkout whose hooks this tooling does not know. The tooling relies on
-     *  variables, services and the `feature` instance that live in the ZFIN repo, which changes
+     *  variables and services that live in the ZFIN repo, which changes
      *  on its own schedule; without this, a mismatch surfaces as a compose error or a stack
      *  that starts subtly wrong. ZFIN_SKIP_SEAMS_CHECK=1 proceeds anyway, with a warning. */
     void checkSeams(File repo) {
@@ -166,7 +166,7 @@ class ZfinUtil {
      *  and `z status` on a host whose ZFIN_DEV_ROOT is not set yet. */
     boolean isFeatureTree(File dir) {
         if (dir.name.startsWith('wt-')) return true
-        def root = env('ZFIN_WORKTREES_DIR') ?: (env('ZFIN_DEV_ROOT') ? "${env('ZFIN_DEV_ROOT')}/worktrees" : null)
+        def root = setting('ZFIN_WORKTREES_DIR') ?: (setting('ZFIN_DEV_ROOT') ? "${setting('ZFIN_DEV_ROOT')}/worktrees" : null)
         if (!root) return false
         def wts = new File(root.replaceFirst('^~', System.getProperty('user.home'))).canonicalFile
         dir.canonicalFile.parentFile == wts
@@ -268,6 +268,51 @@ class ZfinUtil {
     /** Resolve a config value like compose's `${KEY:-dflt}`: docker/.env if set to a
      *  NON-EMPTY value, else the ambient environment, else `dflt`. A blank `KEY=` in .env
      *  falls back (matching compose `:-` and the prior release reader). */
+    /** The tool's own config: KEY=value lines, one per host setting (StackConfig.HOST_SETTINGS).
+     *  Per user, under XDG_CONFIG_HOME, not in the install: the install is a git checkout that
+     *  `git pull` updates, and on a shared host several people may use one. */
+    File configFile() {
+        def base = System.getenv('XDG_CONFIG_HOME') ?: "${System.getProperty('user.home')}/.config"
+        new File(base, 'zfin-build-orchestrator/env')
+    }
+
+    private Map<String, String> configCache = null
+    Map<String, String> hostConfig() {
+        if (configCache != null) return configCache
+        def m = [:]
+        def f = configFile()
+        if (f.isFile()) f.eachLine { line ->
+            def mm = (line =~ /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/)
+            if (mm.find()) m[mm.group(1)] = mm.group(2)
+        }
+        configCache = m
+    }
+
+    /** A host setting: the process environment, then the config file, then `dflt`. Never the
+     *  ZFIN checkout's docker/.env -- that file describes the checkout's stack, not this host. */
+    String setting(String key, String dflt = null) {
+        System.getenv(key) ?: (hostConfig()[key] ?: dflt)
+    }
+
+    /** Where a setting's value comes from, for `z config`: 'env', 'config', or null (default). */
+    String settingSource(String key) {
+        System.getenv(key) ? 'env' : (hostConfig()[key] ? 'config' : null)
+    }
+
+    /** Write (or, with a null value, remove) one setting in the config file, keeping every other
+     *  line -- comments included -- as it was. */
+    void saveSetting(String key, String value) {
+        def f = configFile()
+        def lines = f.isFile() ? f.readLines() : ['# zfin-build-orchestrator host settings -- see `z config`']
+        def kept = lines.findAll { !it.startsWith("${key}=") }
+        if (value != null) kept << "${key}=${value}".toString()
+        f.parentFile.mkdirs()
+        f.text = kept.join('\n') + '\n'
+        configCache = null
+    }
+
+    /** A value from the ZFIN checkout's docker/.env (then the process environment): what the
+     *  checkout's stack is -- ZFIN_RELEASE, DOCKER_ARCH. Host settings use setting(). */
     String env(String key, String dflt = null) {
         def v = dotenv()[key]
         v ?: (System.getenv(key) ?: dflt)
@@ -501,7 +546,7 @@ class ZfinUtil {
      *  bigger claim than the usual shared-data warning, so `z feature new` says it plainly
      *  when the target is not the dedicated stack.
      */
-    String sharedProject() { env('ZFIN_SHARED_PROJECT', 'zfin_shared') }
+    String sharedProject() { setting('ZFIN_SHARED_PROJECT', 'zfin_shared') }
 
     /** How to install a tool. Names BOTH platforms rather than detecting one: whoever reads
      *  this is often setting up a different machine from the one that printed it. Deliberately
@@ -591,18 +636,36 @@ class ZfinUtil {
      *  and a symlink works too on Linux (less reliably under Docker Desktop, which resolves
      *  bind sources host-side). */
     String devRoot() {
-        def v = env('ZFIN_DEV_ROOT')
-        if (!v) die("ZFIN_DEV_ROOT is not set.\n" +
-                    "   It is the parent directory holding the repo, worktrees, archives,\n" +
-                    "   caches and mounted data. Set it in docker/.env, e.g.\n" +
-                    "     ZFIN_DEV_ROOT=${System.getProperty('user.home')}/zfin-dev\n" +
-                    "   See docs/dev-tree-layout.md for the recommended structure.")
+        def v = setting('ZFIN_DEV_ROOT')
+        if (!v) {
+            def con = System.console()
+            if (!con) die("ZFIN_DEV_ROOT is not set.\n" +
+                          "   It is the parent directory holding worktrees, archives and caches. Set it once:\n" +
+                          "     z config set ZFIN_DEV_ROOT=${devRootSuggestion()}\n" +
+                          "   See docs/dev-tree-layout.md for the recommended structure.")
+            println "ZFIN_DEV_ROOT is the parent directory for this tooling's worktrees, archives and"
+            println "caches (docs/dev-tree-layout.md). It is asked once and kept in ${configFile()}."
+            def suggestion = devRootSuggestion()
+            v = con.readLine("ZFIN_DEV_ROOT [${suggestion}]: ")?.trim() ?: suggestion
+            saveSetting('ZFIN_DEV_ROOT', v)
+            info("saved ZFIN_DEV_ROOT=$v to ${configFile()}")
+        }
         v.replaceFirst('^~', System.getProperty('user.home'))
+    }
+
+    /** What to offer for ZFIN_DEV_ROOT: the value a ZFIN checkout's docker/.env already carries,
+     *  when the working directory is in one that has it, else the parent of that checkout, else
+     *  ~/zfin-dev. Probes git directly rather than through REPO, which dies outside a checkout. */
+    String devRootSuggestion() {
+        def common = captureOutput(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
+        def repo = common ? new File(common).parentFile : null
+        def fromEnv = repo ? envField(new File(repo, 'docker/.env'), 'ZFIN_DEV_ROOT') : null
+        fromEnv ?: (repo?.parentFile?.absolutePath ?: "${System.getProperty('user.home')}/zfin-dev")
     }
 
     /** Per-directory overrides, each defaulting to a place under ZFIN_DEV_ROOT. Override one
      *  when it has to live elsewhere -- archives on NFS being the obvious case. */
-    String worktreesDir() { env('ZFIN_WORKTREES_DIR', "${devRoot()}/worktrees") }
+    String worktreesDir() { setting('ZFIN_WORKTREES_DIR') ?: "${devRoot()}/worktrees" }
     /** The two absolute git paths the sidecar must bind, for a worktree OR a plain checkout:
      *  [common, dir]. For a worktree these differ (<repo>/.git and <repo>/.git/worktrees/<slug>);
      *  for a plain checkout both are <repo>/.git, so callers need no special case. */
@@ -614,8 +677,8 @@ class ZfinUtil {
         [one('--git-common-dir'), one('--git-dir')]
     }
 
-    String archiveDir()   { env('ZFIN_ARCHIVE_DIR',   "${devRoot()}/archive") }
-    String cacheDir()     { env('ZFIN_CACHE_DIR',     "${devRoot()}/cache") }
+    String archiveDir()   { setting('ZFIN_ARCHIVE_DIR') ?: "${devRoot()}/archive" }
+    String cacheDir()     { setting('ZFIN_CACHE_DIR')   ?: "${devRoot()}/cache" }
 
     /** A host path from docker/.env, with the leading ~ compose would expand. */
     File envPath(String key) {
@@ -780,20 +843,6 @@ class ZfinUtil {
                 .sort { -it.lastModified() }
     }
 
-    /** Which DOCKER_INSTANCE a stack built from `tree` should generate its properties as:
-     *  [instance: 'feature', feature: true] when that tree defines the feature instance, else
-     *  the base env's own. The feature instance takes DOMAIN_NAME from the stack's own host and
-     *  has an email_overrides entry; an instance missing from that section falls through to the
-     *  REAL curator addresses, so it is only claimed when the tree actually has it. The marker
-     *  is the DOMAIN_NAME indirection, unique to that change. Null when neither exists. */
-    Map stackInstance(File tree, File baseEnv) {
-        def yml = new File(tree, 'commons/env/all-properties.yml')
-        if (yml.isFile() && yml.text.contains('${env.DOCKER_VIRTUAL_HOST}'))
-            return [instance: StackConfig.FEATURE_INSTANCE, feature: true]
-        def inherited = envField(baseEnv, 'DOCKER_INSTANCE')
-        inherited ? [instance: inherited, feature: false] : null
-    }
-
     /** Write a stack's env file: `baseEnv` minus the keys in `strip`, then a marked block of
      *  `values`. A key stripped but not given a value goes back to its compose default -- which
      *  is how a stack drops the base env's published ports. */
@@ -867,15 +916,15 @@ class ZfinUtil {
     // default, like every other host setting.
 
     /** The domain feature hostnames live under: <slug>.<domain>. */
-    String featureDomain() { env('ZFIN_FEATURE_DOMAIN', StackConfig.FEATURE_DOMAIN_DEFAULT) }
+    String featureDomain() { setting('ZFIN_FEATURE_DOMAIN', StackConfig.FEATURE_DOMAIN_DEFAULT) }
     String featureHost(String slug) { "${slug}.${featureDomain()}" }
 
     /** The address a feature stack publishes its ports on. Loopback unless the host says
      *  otherwise: a stack serves a real database, so reachable-from-the-network is a choice. */
-    String featureBind() { env('ZFIN_FEATURE_BIND', '127.0.0.1') }
+    String featureBind() { setting('ZFIN_FEATURE_BIND', '127.0.0.1') }
 
     /** The external Docker network an outside nginx-proxy watches, or null to route nothing. */
-    String proxyNetwork() { env('ZFIN_PROXY_NETWORK', '') ?: null }
+    String proxyNetwork() { setting('ZFIN_PROXY_NETWORK', '') ?: null }
 
     /** How a stack is reached, from its own .env:
      *  [direct: https://<bind>:<port>  (its published httpd port, when it has one),
@@ -923,7 +972,7 @@ class ZfinUtil {
     /** Image used to run tar for volume capture/restore: GNU tar, root-runnable, already local.
      *  Overridable ($ZFIN_TAR_IMAGE) to pin it, or to try one with a faster compressor before
      *  committing the change to the base image. */
-    String tarImage() { env('ZFIN_TAR_IMAGE', StackConfig.compileImage(env('ZFIN_RELEASE'), env('DOCKER_ARCH', ''))) }
+    String tarImage() { setting('ZFIN_TAR_IMAGE') ?: StackConfig.compileImage(env('ZFIN_RELEASE'), env('DOCKER_ARCH', '')) }
 
     /** This host's db image, named the way compose names it: DOCKER_DB_ARCH when declared --
      *  EMPTY is meaningful there (the bare amd64 tag), so presence is tested, not truthiness --

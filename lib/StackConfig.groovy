@@ -28,13 +28,33 @@ class StackConfig {
     // Add a version here once the tooling handles it; drop one once no checkout still has it.
     static final List<Integer> SEAMS_SUPPORTED = [1]
 
+    // HOST SETTINGS: how this host runs the tooling, as opposed to what a stack is. They live in
+    // the tool's own config file (ZfinUtil.configFile), never in a ZFIN checkout's docker/.env
+    // or copied into a feature's: they are inputs to `z feature new` and to commands with no
+    // feature at all, and a copy per stack would go stale the first time one changes.
+    // Precedence: the process environment, then the config file, then the default.
+    static final Map<String, String> HOST_SETTINGS = [
+        ZFIN_DEV_ROOT         : 'parent of worktrees/, archive/ and cache/ (asked for on first use; no default)',
+        ZFIN_WORKTREES_DIR    : 'feature worktrees (default: $ZFIN_DEV_ROOT/worktrees)',
+        ZFIN_ARCHIVE_DIR      : 'freeze archives, seeds, session history (default: $ZFIN_DEV_ROOT/archive)',
+        ZFIN_CACHE_DIR        : 'download caches (default: $ZFIN_DEV_ROOT/cache)',
+        ZFIN_SEED             : 'seed a new feature or the shared stack restores (default: the newest)',
+        ZFIN_FEATURE_BIND     : 'address feature stacks publish their ports on (default: 127.0.0.1)',
+        ZFIN_FEATURE_DOMAIN   : 'feature hostnames are <slug>.<this> (default: zfin.test)',
+        ZFIN_PROXY_NETWORK    : 'an outside nginx-proxy\'s network for new stacks to join (default: none)',
+        ZFIN_SHARED_PROJECT   : 'the stack --shared-db features attach to (default: zfin_shared)',
+        ZFIN_CLAUDE_TOKEN_FILE: 'the Claude sidecar\'s token (default: ~/.zfin/claude-token)',
+        ZFIN_TAR_IMAGE        : 'image that tars volumes (default: the compile image)',
+    ]
+
     static final String FEATURE_DOMAIN_DEFAULT = 'zfin.test'
 
-    // The INSTANCE every per-feature stack generates properties as (written into the feature's
-    // docker/.env by NewFeature). Defined in commons/env/all-properties.yml: DOMAIN_NAME comes
-    // from ${env.DOCKER_VIRTUAL_HOST} so links follow the stack's own host instead of pointing
-    // at production, and it has an email_overrides entry -- an instance missing from that
-    // section falls through to the REAL curator addresses.
+    // The INSTANCE every stack this tooling makes generates its properties as (written into the
+    // stack's .env by NewFeature and SeedBuild). Deliberately NOT an instance listed in the ZFIN
+    // repo's commons/env/all-properties.yml: an unlisted instance gets the development defaults,
+    // including SMTP_HOST=mailpit, so the stack's mail is caught rather than delivered. Inheriting
+    // the base checkout's instance (coral, say) would instead pull in that host's overrides.
+    // DOMAIN_NAME is the default zfin.org, so absolute links the app builds point at production.
     static final String FEATURE_INSTANCE = 'feature'
 
     // The main checkout's own stack. A last-resort fallback only: every command that acts on a
@@ -135,10 +155,8 @@ class StackConfig {
     // Under $HOME, deliberately NOT under ZFIN_DEV_ROOT. A Claude token is a PERSONAL
     // credential, and on a shared host that tree is group-writable so developers can
     // collaborate on worktrees: a token there would hand one person's subscription to everyone
-    // with an account. Override with $ZFIN_CLAUDE_TOKEN_FILE.
-    static String claudeTokenFile() {
-        System.getenv('ZFIN_CLAUDE_TOKEN_FILE') ?: "${System.getProperty('user.home')}/.zfin/claude-token"
-    }
+    // with an account. Override with the ZFIN_CLAUDE_TOKEN_FILE host setting.
+    static final String CLAUDE_TOKEN_FILE_DEFAULT = "${System.getProperty('user.home')}/.zfin/claude-token"
 
     static final String FREEZE_MANIFEST = 'freeze.json'
     static final String SEED_MANIFEST   = 'seed.json'

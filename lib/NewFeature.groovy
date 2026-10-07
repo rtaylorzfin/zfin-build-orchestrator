@@ -54,8 +54,8 @@
 //                   db 5432+N, debug 5000+N, jenkins 9499+N). Default: the first free offset.
 //
 // Reaching the stack. It publishes httpd on its own ports -- https://127.0.0.1:8443+N -- on the
-// address ZFIN_FEATURE_BIND names (default 127.0.0.1). When docker/.env sets
-// ZFIN_PROXY_NETWORK, httpd also joins that network and advertises VIRTUAL_HOST=<host>, so an
+// address ZFIN_FEATURE_BIND names (default 127.0.0.1). When the host setting
+// ZFIN_PROXY_NETWORK is set, httpd also joins that network and advertises VIRTUAL_HOST=<host>, so an
 // outside nginx-proxy watching it routes https://<host>. The repo runs no proxy either way.
 //   --up            Bring up the restored data tier (db + solr) after provisioning.
 //                   If the seed carries the app tier (z seed create does, by default),
@@ -172,7 +172,7 @@ class NewFeature {
 // snapshot to restore from (dated captures, full vs lean, a branch-specific one) -- a
 // selector, not a constant; the default grabs the newest, so the common case needs neither.
 // --no-seed declines all three and takes a cold stack.
-        def tag = noSeed ? null : (tagArg ?: System.getenv('ZFIN_SEED') ?: zfinUtil.newestSeed())
+        def tag = noSeed ? null : (tagArg ?: zfinUtil.setting('ZFIN_SEED') ?: zfinUtil.newestSeed())
 // A seed with no app tier restores db+solr and nothing else, and the stack then fails long
 // after provisioning "succeeds": tomcat cannot find server.xml, httpd cannot open
 // inc-redirect. `z seed create` warns about this when it writes such a seed, but a seed
@@ -307,7 +307,7 @@ class NewFeature {
         def proxyNet = zfinUtil.proxyNetwork()
         if (proxyNet && zfinUtil.runQuietly(['docker', 'network', 'inspect', proxyNet]) != 0)
             die("ZFIN_PROXY_NETWORK=$proxyNet, but there is no such Docker network.\n" +
-                "   Start the proxy that owns it, or unset ZFIN_PROXY_NETWORK in docker/.env to\n" +
+                "   Start the proxy that owns it, or unset ZFIN_PROXY_NETWORK (z config unset ZFIN_PROXY_NETWORK) to\n" +
                 "   reach stacks on their published ports only. Nothing was created.")
 
         if (doSharedDb) {
@@ -558,11 +558,8 @@ class NewFeature {
 
 // 2. per-feature .env: start from the base env, strip the keys we own, append our
 //    overrides. DOCKER_INSTANCE is one of the keys we own: without it a feature inherits the
-//    base env's instance (coral, say) and generates THAT host's zfin.properties -- including
-//    DOMAIN_NAME=zfin.org, so a stack served at its own host still emits absolute links to
-//    production. The `feature` instance (commons/env/all-properties.yml) takes DOMAIN_NAME
-//    from ${env.DOCKER_VIRTUAL_HOST}, i.e. this stack's own host, and has its own
-//    email_overrides entry so dev mail cannot reach real curators.
+//    base env's instance (coral, say) and generates THAT host's zfin.properties. See
+//    StackConfig.FEATURE_INSTANCE for why every feature runs as the same, unlisted instance.
         step('per-feature .env')
         def owned = ['COMPOSE_PROJECT_NAME', 'DOCKER_SOURCE_ROOTS_PATH', 'DOCKER_VIRTUAL_HOST',
                      'DOCKER_EXTERNAL_VHOST',
@@ -593,25 +590,7 @@ class NewFeature {
         StackConfig.featureEnv(host, gitCommon, gitDir, proxyNet != null).each { k, v -> outEnv << "$k=$v\n" }
         if (useExisting) outEnv << "ZFIN_FEATURE_BRANCH_PREEXISTING=1\n"
 
-// DOCKER_INSTANCE: only claim the `feature` instance if THIS BRANCH actually defines it.
-// A branch cut before the instance was added has no `feature` entry in all-properties.yml,
-// and an instance missing from email_overrides falls through to the REAL addresses -- that
-// section's documented behaviour -- so CURATORS_AT_ZFIN would resolve to curators@zfin.org on
-// a dev stack. Silent, and the wrong direction to fail. The worktree exists by now, so ask it
-// rather than assuming; the marker is the DOMAIN_NAME indirection, unique to that change.
-// Without it we leave DOCKER_INSTANCE inherited from the base env (the pre-existing behaviour).
-        def inst = zfinUtil.stackInstance(wt, baseEnvFile)
-        // Written EXPLICITLY even when inherited: DOCKER_INSTANCE is in `owned`, so it was
-        // stripped from the copied base env, and an unset one fails the first gradle call
-        // ("INSTANCE environment variable is required").
-        if (!inst) die("the base env ($baseEnvFile) sets no DOCKER_INSTANCE, and this branch has " +
-                       "no '${StackConfig.FEATURE_INSTANCE}' instance to fall back on")
-        outEnv << "DOCKER_INSTANCE=${inst.instance}\n"
-        if (inst.feature)
-            info("instance: ${inst.instance} (DOMAIN_NAME follows $host; dev mail stays caught)")
-        else
-            info("instance: ${inst.instance} (inherited) -- this branch has no '${StackConfig.FEATURE_INSTANCE}' " +
-                 "instance yet, so DOMAIN_NAME will still say zfin.org. Merge the instance change to fix.")
+        outEnv << "DOCKER_INSTANCE=${StackConfig.FEATURE_INSTANCE}\n"
 
 // 2b. No per-worktree bundle. The stack's identity lives in its own docker/.env, and its
 //     compose files come from THIS checkout -- so there is nothing to copy, nothing to go

@@ -41,8 +41,8 @@ marks elided output.
     └── zfin-10510
 
 26 directories, 1 file
-14:47:52 ryan@mac:.../source_roots/stacks$ grep ZFIN_DEV_ROOT base/docker/.env
-ZFIN_DEV_ROOT=/opt/zfin/source_roots/stacks
+14:47:52 ryan@mac:.../source_roots/stacks$ z config get ZFIN_DEV_ROOT
+/opt/zfin/source_roots/stacks
 ```
 
 ```console
@@ -134,12 +134,12 @@ freeze   ls       new      refresh  rm       session  thaw
 
 ```console
 09:02:11 ryan@laptop:~/zfin-dev/coral$ z feature ls
-!! ZFIN_DEV_ROOT is not set.
-   It is the parent directory holding the repo, worktrees, archives,
-   caches and mounted data. Set it in docker/.env, e.g.
-     ZFIN_DEV_ROOT=/Users/ryan/zfin-dev
-   See docs/dev-tree-layout.md for the recommended structure.
-09:02:30 ryan@laptop:~/zfin-dev/coral$ z scaffold --root ~/zfin-dev
+ZFIN_DEV_ROOT is the parent directory for this tooling's worktrees, archives and
+caches (docs/dev-tree-layout.md). It is asked once and kept in /Users/ryan/.config/zfin-build-orchestrator/env.
+ZFIN_DEV_ROOT [/Users/ryan/zfin-dev]:
+>> saved ZFIN_DEV_ROOT=/Users/ryan/zfin-dev to /Users/ryan/.config/zfin-build-orchestrator/env
+no feature worktrees under /Users/ryan/zfin-dev/worktrees
+09:02:30 ryan@laptop:~/zfin-dev/coral$ z scaffold
 >> dev tree root: /Users/ryan/zfin-dev
   created  worktrees
   created  archive
@@ -156,24 +156,22 @@ freeze   ls       new      refresh  rm       session  thaw
   created  mounts/gff3
   created  mounts/hh_atlas
 
->> add this to /Users/ryan/zfin-dev/coral/docker/.env to make the tree findable:
-     ZFIN_DEV_ROOT=/Users/ryan/zfin-dev
+>> ZFIN_DEV_ROOT already points here
 
 >> mounts/ is empty scaffolding. Point the DOCKER_*_PATH vars at it in docker/.env,
 >> or leave them at whatever this host already uses -- those paths are often shared
 >> with other tooling rather than owned by this tree. See docs/dev-tree-layout.md.
-09:02:41 ryan@laptop:~/zfin-dev/coral$ echo 'ZFIN_DEV_ROOT=/Users/ryan/zfin-dev' >> docker/.env
-09:02:44 ryan@laptop:~/zfin-dev/coral$ z scaffold
->> dev tree root: /Users/ryan/zfin-dev
-  exists        worktrees
+09:02:41 ryan@laptop:~/zfin-dev/coral$ z config
+config file: /Users/ryan/.config/zfin-build-orchestrator/env
+  ZFIN_DEV_ROOT           /Users/ryan/zfin-dev  [config]
+                            parent of worktrees/, archive/ and cache/ (asked for on first use; no default)
+  ZFIN_WORKTREES_DIR      -
+                            feature worktrees (default: $ZFIN_DEV_ROOT/worktrees)
+  ZFIN_ARCHIVE_DIR        -
+                            freeze archives, seeds, session history (default: $ZFIN_DEV_ROOT/archive)
   ...
-  exists        mounts/hh_atlas
->> nothing to do -- the tree is already in place
-
->> docker/.env already points here (ZFIN_DEV_ROOT=/Users/ryan/zfin-dev)
-
->> mounts/ is empty scaffolding. Point the DOCKER_*_PATH vars at it in docker/.env,
-...
+09:02:50 ryan@laptop:~/zfin-dev/coral$ z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
+>> ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive  -> /Users/ryan/.config/zfin-build-orchestrator/env
 ```
 
 ---
@@ -233,11 +231,11 @@ ZFIN_FEATURE_BIND=127.0.0.1
 ```console
 # An nginx-proxy that already runs on this host can route stacks by name instead. Name its
 # network; each stack made from then on joins it and advertises <slug>.<ZFIN_FEATURE_DOMAIN>.
-14:53:00 ryan@mac:.../stacks/base$ echo 'ZFIN_PROXY_NETWORK=ngproxy_net' >> docker/.env
+14:53:00 ryan@mac:.../stacks/base$ z config set ZFIN_PROXY_NETWORK=ngproxy_net
 14:53:04 ryan@mac:.../stacks/base$ z feature new zfin-3001 -y --up
 >> seed: 2026-09-29
 !! ZFIN_PROXY_NETWORK=ngproxy_net, but there is no such Docker network.
-   Start the proxy that owns it, or unset ZFIN_PROXY_NETWORK in docker/.env to
+   Start the proxy that owns it, or unset ZFIN_PROXY_NETWORK (z config unset ZFIN_PROXY_NETWORK) to
    reach stacks on their published ports only. Nothing was created.
 14:53:30 ryan@mac:.../stacks/base$ docker network ls --filter name=ngproxy_net --format '{{.Name}}'
 ngproxy_net
@@ -582,7 +580,6 @@ Updating files: 100% (7481/7481), done.
 HEAD is now at 15984f0b5d ZFIN-10461: reproduce Load-NCBI-GFF3-File's real DB effects without the job (#2012)
 
 >> [2/7] per-feature .env
->> instance: feature (DOMAIN_NAME follows zfin-12345.zfin.test; dev mail stays caught)
 
 >> [3/7] restore volumes
 >>   [1/10] tls_certs            0 MB in   1.2s
@@ -784,7 +781,6 @@ Preparing worktree (new branch 'ZFIN-2001')
 ...
 
 >> [2/4] per-feature .env
->> instance: feature (DOMAIN_NAME follows zfin-2001.zfin.test; dev mail stays caught)
 
 >> [3/4] restore volumes
 >>   [1/10] tls_certs            0 MB in   1.2s

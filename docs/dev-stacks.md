@@ -26,6 +26,11 @@ ZFIN checkout or feature worktree: it asks git which checkout you are standing i
 the base `docker-compose.yml` and `docker/.env` from there. From anywhere else, set
 `ZFIN_REPO=<checkout>`. Update the tooling with `git pull` in its checkout.
 
+Host settings (where worktrees and archives live, which address and proxy network stacks use)
+are kept in the tool's own config file and managed with `z config`; see
+[dev-tree-layout.md](dev-tree-layout.md#configuration). A ZFIN checkout's `docker/.env` holds
+only what its stack is (`ZFIN_RELEASE`, the `DOCKER_*` paths and ports).
+
 **Version check.** The ZFIN repo's `docker/docker-compose.yml` declares which set of dev-stack
 hooks it provides, as `x-devstack-seams: N`, and `StackConfig.SEAMS_SUPPORTED` lists the
 versions this tooling works with. `z` refuses a checkout outside that list the first time it
@@ -190,8 +195,10 @@ each stack freezes what they were into its own `.env` when it is made:
 | `ZFIN_PROXY_NETWORK` | unset | an outside nginx-proxy's network: stacks join it and advertise their name |
 
 **Directly.** Every stack publishes httpd at `https://<bind>:8443+N` (and `http` 8080+N). Nothing
-to set up. `DOMAIN_NAME` still follows the stack's hostname, so absolute links the app emits --
-mostly in mail -- name the host, not the port; relative links, which are most of them, work.
+to set up. Relative links, which are most of them, work. A stack runs as the `feature` instance,
+which the ZFIN repo's `all-properties.yml` does not list, so it gets the development defaults:
+`DOMAIN_NAME` is `zfin.org`, and the few absolute links the app builds -- mostly in mail --
+point at production. That mail goes to the stack's mailpit (`SMTP_HOST=mailpit`), never out.
 
 **Through a proxy the host already runs.** Set `ZFIN_PROXY_NETWORK` to a network that proxy
 watches. A stack made after that adds `docker-compose.overlay-proxy-network.yml` and advertises

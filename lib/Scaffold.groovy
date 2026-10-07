@@ -31,14 +31,13 @@ class Scaffold {
             }
         }
 
-        // Resolve without going through ZfinUtil.devRoot(), which DIES when unset -- and being
-        // unset is the normal state the first time anyone runs this.
-        def rootPath = rootArg ?: zfinUtil.env('ZFIN_DEV_ROOT')
+        // Resolve without going through ZfinUtil.devRoot(), which prompts when unset -- and
+        // --root is this command's own way of answering that.
+        def rootPath = rootArg ?: zfinUtil.setting('ZFIN_DEV_ROOT')
         if (!rootPath)
             die("no root given.\n" +
-                "   z scaffold --root <dir>      e.g. --root ${System.getProperty('user.home')}/zfin-dev\n" +
-                "   ...or set ZFIN_DEV_ROOT in docker/.env first.\n" +
-                "   See docs/dev-tree-layout.md.")
+                "   z scaffold --root <dir>      e.g. --root ${zfinUtil.devRootSuggestion()}\n" +
+                "   It is saved as ZFIN_DEV_ROOT (z config). See docs/dev-tree-layout.md.")
         def root = new File(rootPath.replaceFirst('^~', System.getProperty('user.home'))).absoluteFile
 
         if (root.exists() && !root.isDirectory())
@@ -77,18 +76,19 @@ class Scaffold {
         had.each   { println "  exists        $it" }
         if (!made) info("nothing to do -- the tree is already in place")
 
-        // The one thing that is not a directory: the variable that makes any of it findable.
-        def envFile = new File(zfinUtil.DOCKER, '.env')
-        def current = zfinUtil.envField(envFile, 'ZFIN_DEV_ROOT')
+        // The one thing that is not a directory: the setting that makes any of it findable.
+        def current = zfinUtil.setting('ZFIN_DEV_ROOT')
+        def currentFile = current ? new File(current.replaceFirst('^~', System.getProperty('user.home'))).absoluteFile : null
         println ""
-        if (current && new File(current.replaceFirst('^~', System.getProperty('user.home'))).absoluteFile == root) {
-            info("docker/.env already points here (ZFIN_DEV_ROOT=$current)")
-        } else if (current) {
-            System.err.println("!! docker/.env has ZFIN_DEV_ROOT=$current, which is NOT this tree.")
-            System.err.println("   Update it to:  ZFIN_DEV_ROOT=$root")
+        if (currentFile == root) {
+            info("ZFIN_DEV_ROOT already points here")
+        } else if (dryRun) {
+            info("would save ZFIN_DEV_ROOT=$root to ${zfinUtil.configFile()}${current ? " (replacing $current)" : ''}")
         } else {
-            info("add this to ${envFile} to make the tree findable:")
-            println "     ZFIN_DEV_ROOT=$root"
+            zfinUtil.saveSetting('ZFIN_DEV_ROOT', root.path)
+            info("saved ZFIN_DEV_ROOT=$root to ${zfinUtil.configFile()}${current ? " (was $current)" : ''}")
+            if (zfinUtil.settingSource('ZFIN_DEV_ROOT') == 'env')
+                System.err.println("!! \$ZFIN_DEV_ROOT in this shell's environment still overrides it")
         }
 
         if (doMounts) {

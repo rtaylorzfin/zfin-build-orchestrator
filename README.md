@@ -5,7 +5,7 @@ db+solr, and a Claude sidecar, driven from one front door, `z`. Opt-in: install 
 outside any ZFIN checkout, and point it at the checkouts you want to run.
 
 The ZFIN repo provides the hooks this tooling relies on (per-stack ports, memory, the
-`feature` instance, healthchecks); nothing in it requires this tooling.
+healthchecks); nothing in it requires this tooling.
 
 Groovy only, run on the host. Needs `groovy`, Docker with Compose v2, and git.
 

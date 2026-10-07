@@ -80,7 +80,7 @@ class FeatureFreeze {
 
         if (!dest.exists() && !dest.mkdirs())
             die("cannot create $dest\n" +
-                "   Point ZFIN_ARCHIVE_DIR (docker/.env, or the environment) at writable storage.")
+                "   Point ZFIN_ARCHIVE_DIR at writable storage (z config set ZFIN_ARCHIVE_DIR=<dir>).")
 
         def compose = ['docker', 'compose', '-p', project]
         if (envF.isFile()) compose += ['--env-file', envF.absolutePath]

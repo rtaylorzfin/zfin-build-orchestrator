@@ -353,9 +353,6 @@ class SeedBuild {
         def sha = zfinUtil.sha256(dump)
 
         // ---- the worktree + env -------------------------------------------------------------
-        def inst = zfinUtil.stackInstance(src, baseEnv)
-        if (!inst) die("the base env ($baseEnv) sets no DOCKER_INSTANCE, and ${commit.take(10)} has no " +
-                       "'${StackConfig.FEATURE_INSTANCE}' instance to fall back on")
         def (gitCommon, gitDir) = zfinUtil.gitDirs(src)
         // Ports: `127.0.0.1:` makes compose's "${VAR}:5432" read 127.0.0.1::5432 -- an EPHEMERAL
         // host port on loopback, so this stack can never collide with another. The vhost key is
@@ -376,10 +373,10 @@ class SeedBuild {
                 DOCKER_SOLR_HEAP        : StackConfig.FEATURE_SOLR_HEAP,
                 DOCKER_GIT_COMMON_DIR   : gitCommon,
                 DOCKER_GIT_WORKTREE_DIR : gitDir,
-                DOCKER_INSTANCE         : inst.instance,
+                DOCKER_INSTANCE         : StackConfig.FEATURE_INSTANCE,
                 ZFIN_COMPOSE_OVERLAYS   : ''] + paths +
                 (dbPlatform ? [DOCKER_DB_ARCH: StackConfig.archSuffix(dbPlatform), DOCKER_DB_PLATFORM: dbPlatform] : [:]))
-        info("instance: ${inst.instance}${inst.feature ? '' : ' (inherited)'}   env: $envF")
+        info("instance: ${StackConfig.FEATURE_INSTANCE}   env: $envF")
 
         [tag    : tag, project: project, created: new Date().format('yyyy-MM-dd HH:mm:ss'),
          ref    : ref ?: 'HEAD', commit: commit, repo: repoTop,

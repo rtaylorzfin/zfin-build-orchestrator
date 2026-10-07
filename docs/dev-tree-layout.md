@@ -1,7 +1,8 @@
 # The dev tree: one parent for everything
 
 Everything this tooling reads or writes lives under **one directory you choose**, declared
-once as `ZFIN_DEV_ROOT` in `docker/.env`.
+once as the `ZFIN_DEV_ROOT` host setting. `z` asks for it the first time it needs it and keeps
+the answer in its config file (`z config path`).
 
 There is deliberately **no default**. An absolute default like `/opt/zfin/dev` is a guess
 about someone else's machine, and when it is wrong the symptom is a directory appearing
@@ -14,7 +15,7 @@ z scaffold --root ~/zfin-dev      # or just `z scaffold` once ZFIN_DEV_ROOT is s
 ```
 
 It creates what is missing and never clobbers, so it is safe to re-run on a partially
-set-up tree, and it prints the `ZFIN_DEV_ROOT` line to add to `docker/.env`.
+set-up tree, and it saves `--root` as `ZFIN_DEV_ROOT`.
 
 ---
 
@@ -54,7 +55,7 @@ ZFIN has a long-standing convention of hosting per-host checkouts as
 inverts that and reads as though the repo *is* the site rather than one host's copy of it.
 
 **Name the checkout for the instance it runs as** — `coral`, `cell`, `schlapp`. The tooling
-does not care: it derives the checkout root from where `z` lives, so the directory can be
+does not care: `z` asks git which checkout the working directory is in, so the directory can be
 called anything. This is a readability convention, not a requirement.
 
 (The container always sees the source at `/opt/zfin/source_roots/zfin.org` regardless —
@@ -76,14 +77,22 @@ a better test than a name prefix anyway — it cannot mistake a stray directory 
 
 ## Configuration
 
-Required, in `docker/.env`:
+These are **host settings**: how this machine runs the tooling, kept in the tool's own config
+file (`~/.config/zfin-build-orchestrator/env`, under `$XDG_CONFIG_HOME` when that is set) and
+never in a ZFIN checkout's `docker/.env`. Manage them with `z config`:
 
 ```bash
-ZFIN_DEV_ROOT=~/zfin-dev
+z config                                   # every setting, its value and where it comes from
+z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
+z config unset ZFIN_ARCHIVE_DIR            # back to the default
 ```
 
-Everything else derives from it. Override individually only when something must live
-elsewhere:
+The process environment overrides the file, so a one-off `ZFIN_SEED=<tag> z feature new …`
+works without changing anything.
+
+`ZFIN_DEV_ROOT` is the only one without a default; `z` asks for it on first use, suggesting the
+value a checkout's `docker/.env` already carries if it has one. Everything else derives from it.
+Override individually only when something must live elsewhere:
 
 | variable | defaults to | override when |
 |---|---|---|
@@ -122,10 +131,10 @@ and Linux.
 
 Two ways, and they are not equivalent:
 
-**Override the variable** (preferred):
+**Override the setting** (preferred):
 
 ```bash
-ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
+z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
 ```
 
 **Symlink** the directory. Works on Linux. Under Docker Desktop for macOS a bind source that

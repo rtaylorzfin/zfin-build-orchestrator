@@ -129,7 +129,7 @@ class FeatureThaw {
         // this costs no archive space at all. It is the seed's cache rather than this branch's
         // exact one -- the delta is usually a couple of dependencies, which gradle fetches.
         if (doCaches) {
-            def tag = spec?.tag ?: zfinUtil.envField(envF, 'ZFIN_SEED') ?: zfinUtil.env('ZFIN_SEED', '')
+            def tag = spec?.tag ?: zfinUtil.envField(envF, 'ZFIN_SEED') ?: zfinUtil.setting('ZFIN_SEED', '')
             def auxDir = tag ? zfinUtil.seedDir(tag) : null
             def absent = StackConfig.CACHE_VOLS.findAll { !zfinUtil.volumeExists("${project}_${it}") }
             def warmable = auxDir?.isDirectory() ? absent.findAll { zfinUtil.archiveFileFor(auxDir, it) } : []

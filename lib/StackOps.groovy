@@ -65,7 +65,7 @@ class StackOps {
         // container's profile explain how to fill it, rather than failing here: entering the
         // sidecar to read the instructions is a perfectly reasonable thing to do.
         def prepareClaudeToken = {
-            def f = new File(StackConfig.claudeTokenFile())
+            def f = new File(zfinUtil.setting('ZFIN_CLAUDE_TOKEN_FILE', StackConfig.CLAUDE_TOKEN_FILE_DEFAULT).replaceFirst('^~', System.getProperty('user.home')))
             zfinUtil.childEnv['ZFIN_CLAUDE_TOKEN_FILE'] = f.absolutePath
             if (f.isFile()) {
                 if (f.length() == 0)
