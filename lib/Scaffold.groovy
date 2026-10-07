@@ -2,7 +2,7 @@
 //
 //   z scaffold [--root DIR] [--no-mounts] [--dry-run]
 //
-//   --root DIR    where to build it. Defaults to $ZFIN_DEV_ROOT if set; otherwise required.
+//   --root DIR    where to build it. Defaults to the dev tree you are in; otherwise required.
 //   --no-mounts   skip mounts/ -- on a server those DOCKER_*_PATH directories usually point
 //                 at existing organisation-wide locations, not at this tree.
 //   --dry-run     print what it would do.
@@ -31,13 +31,13 @@ class Scaffold {
             }
         }
 
-        // Resolve without going through ZfinUtil.devRoot(), which prompts when unset -- and
-        // --root is this command's own way of answering that.
+        // Resolve without going through ZfinUtil.devRoot(), which prompts when there is no tree
+        // -- and --root is this command's own way of answering that.
         def rootPath = rootArg ?: zfinUtil.setting('ZFIN_DEV_ROOT')
         if (!rootPath)
             die("no root given.\n" +
                 "   z scaffold --root <dir>      e.g. --root ${zfinUtil.devRootSuggestion()}\n" +
-                "   It is saved as ZFIN_DEV_ROOT (z config). See docs/dev-tree-layout.md.")
+                "   It becomes a dev tree: a ${ZfinUtil.TREE_CONFIG} file marks it. See docs/dev-tree-layout.md.")
         def root = new File(rootPath.replaceFirst('^~', System.getProperty('user.home'))).absoluteFile
 
         if (root.exists() && !root.isDirectory())
@@ -76,19 +76,18 @@ class Scaffold {
         had.each   { println "  exists        $it" }
         if (!made) info("nothing to do -- the tree is already in place")
 
-        // The one thing that is not a directory: the setting that makes any of it findable.
-        def current = zfinUtil.setting('ZFIN_DEV_ROOT')
-        def currentFile = current ? new File(current.replaceFirst('^~', System.getProperty('user.home'))).absoluteFile : null
+        // The one thing that is not a directory: the zfin-dev.env that makes this a dev tree,
+        // and that z finds by walking up from wherever you are inside it.
+        def marker = new File(root, ZfinUtil.TREE_CONFIG)
         println ""
-        if (currentFile == root) {
-            info("ZFIN_DEV_ROOT already points here")
+        if (marker.isFile()) {
+            info("already a dev tree ($marker)")
         } else if (dryRun) {
-            info("would save ZFIN_DEV_ROOT=$root to ${zfinUtil.configFile()}${current ? " (replacing $current)" : ''}")
+            info("would create $marker")
         } else {
-            zfinUtil.saveSetting('ZFIN_DEV_ROOT', root.path)
-            info("saved ZFIN_DEV_ROOT=$root to ${zfinUtil.configFile()}${current ? " (was $current)" : ''}")
-            if (zfinUtil.settingSource('ZFIN_DEV_ROOT') == 'env')
-                System.err.println("!! \$ZFIN_DEV_ROOT in this shell's environment still overrides it")
+            def recorded = zfinUtil.markTree(root)
+            info("created $marker -- this directory is now a dev tree")
+            if (recorded) info("recorded it as this user's ZFIN_DEV_ROOT (${zfinUtil.userConfigFile()}), since it is not above here")
         }
 
         if (doMounts) {

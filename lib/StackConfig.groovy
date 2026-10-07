@@ -30,12 +30,12 @@ class StackConfig {
     static final List<Integer> COMPOSE_VERSIONS_SUPPORTED = [1]
 
     // HOST SETTINGS: how this host runs the tooling, as opposed to what a stack is. They live in
-    // the tool's own config file (ZfinUtil.configFile), never in a ZFIN checkout's docker/.env
-    // or copied into a feature's: they are inputs to `z feature new` and to commands with no
-    // feature at all, and a copy per stack would go stale the first time one changes.
-    // Precedence: the process environment, then the config file, then the default.
+    // the dev tree's zfin-dev.env or the user's file (see ZfinUtil's host-settings section),
+    // never in a ZFIN checkout's docker/.env or copied into a feature's: they are inputs to
+    // `z feature new` and to commands with no feature at all, and a copy per stack would go
+    // stale the first time one changes.
     static final Map<String, String> HOST_SETTINGS = [
-        ZFIN_DEV_ROOT         : 'parent of worktrees/, archive/ and cache/ (asked for on first use; no default)',
+        ZFIN_DEV_ROOT         : 'the dev tree: where zfin-dev.env is, found by walking up (or --user, from outside one)',
         ZFIN_WORKTREES_DIR    : 'feature worktrees (default: $ZFIN_DEV_ROOT/worktrees)',
         ZFIN_ARCHIVE_DIR      : 'freeze archives, seeds, session history (default: $ZFIN_DEV_ROOT/archive)',
         ZFIN_CACHE_DIR        : 'download caches (default: $ZFIN_DEV_ROOT/cache)',

@@ -1,8 +1,8 @@
 # The dev tree: one parent for everything
 
-Everything this tooling reads or writes lives under **one directory you choose**, declared
-once as the `ZFIN_DEV_ROOT` host setting. `z` asks for it the first time it needs it and keeps
-the answer in its config file (`z config path`).
+Everything this tooling reads or writes lives under **one directory you choose**: the dev
+tree, `ZFIN_DEV_ROOT`. A `zfin-dev.env` file at its root marks it, and `z` finds that file by
+walking up from wherever you are, the way git finds `.git`. One host can carry several trees.
 
 There is deliberately **no default**. An absolute default like `/opt/zfin/dev` is a guess
 about someone else's machine, and when it is wrong the symptom is a directory appearing
@@ -11,11 +11,13 @@ somewhere unexpected rather than an error.
 Create it with:
 
 ```bash
-z scaffold --root ~/zfin-dev      # or just `z scaffold` once ZFIN_DEV_ROOT is set
+z scaffold --root ~/zfin-dev      # or just `z scaffold` from inside an existing tree
 ```
 
 It creates what is missing and never clobbers, so it is safe to re-run on a partially
-set-up tree, and it saves `--root` as `ZFIN_DEV_ROOT`.
+set-up tree. It writes the tree's `zfin-dev.env`; if you ran it from somewhere that is not
+inside the new tree, it also records the tree in your user file, so `z` finds it from there.
+Run `z` with no tree to be found and, on a terminal, it offers to create one.
 
 ---
 
@@ -24,9 +26,8 @@ set-up tree, and it saves `--root` as `ZFIN_DEV_ROOT`.
 ```
 $ZFIN_DEV_ROOT/                  e.g. ~/zfin-dev  or  /opt/zfin-dev
 ├── zfin-build-orchestrator/     this tooling: one install serves every checkout below.
-├── <checkout>/                  the checkout — name it for the INSTANCE, not "zfin.org".
-│                                Its location is not a convention the tooling enforces: `z`
-│                                asks git where it is. It need not live here at all.
+├── <checkout>/                  a ZFIN checkout, named however you like: `z` asks git
+│                                where it is, so it need not live here at all.
 ├── worktrees/
 │   ├── zfin-10358/              one per feature; the directory name IS the ticket
 │   └── zfin-10475/
@@ -48,21 +49,6 @@ One thing to back up, relocate, or delete.
 
 ---
 
-## Why name the checkout `coral`, not `zfin.org`
-
-ZFIN has a long-standing convention of hosting per-host checkouts as
-`/path/to/zfin.org/{cell,coral,schlapp,...}`. Naming the checkout directory `zfin.org`
-inverts that and reads as though the repo *is* the site rather than one host's copy of it.
-
-**Name the checkout for the instance it runs as** — `coral`, `cell`, `schlapp`. The tooling
-does not care: `z` asks git which checkout the working directory is in, so the directory can be
-called anything. This is a readability convention, not a requirement.
-
-(The container always sees the source at `/opt/zfin/source_roots/zfin.org` regardless —
-that is a fixed mount *target*, unrelated to the host layout.)
-
----
-
 ## Worktrees: `worktrees/<ticket>`, no prefix
 
 Earlier versions used `wt-<ticket>` directories as siblings of the checkout. With a handful
@@ -77,22 +63,28 @@ a better test than a name prefix anyway — it cannot mistake a stray directory 
 
 ## Configuration
 
-These are **host settings**: how this machine runs the tooling, kept in the tool's own config
-file (`~/.config/zfin-build-orchestrator/env`, under `$XDG_CONFIG_HOME` when that is set) and
-never in a ZFIN checkout's `docker/.env`. Manage them with `z config`:
+These are **host settings**: how this machine runs the tooling, never kept in a ZFIN checkout's
+`docker/.env`. They come from, in order:
+
+1. the process environment, so a one-off `ZFIN_SEED=<tag> z feature new …` changes nothing;
+2. the dev tree's `zfin-dev.env` -- this tree's settings;
+3. your user file, `~/.config/zfin-build-orchestrator/env` (under `$XDG_CONFIG_HOME` when that is
+   set) -- for running `z` outside any tree, such as from a checkout kept elsewhere. It may name
+   `ZFIN_DEV_ROOT`, and holds your own defaults;
+4. the default.
+
+Manage them with `z config`:
 
 ```bash
 z config                                   # every setting, its value and where it comes from
-z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
-z config unset ZFIN_ARCHIVE_DIR            # back to the default
+z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive     # into this tree's zfin-dev.env
+z config set --user ZFIN_DEV_ROOT=~/zfin-dev                   # find that tree from anywhere
+z config unset ZFIN_ARCHIVE_DIR            # back to the next source
 ```
 
-The process environment overrides the file, so a one-off `ZFIN_SEED=<tag> z feature new …`
-works without changing anything.
-
-`ZFIN_DEV_ROOT` is the only one without a default; `z` asks for it on first use, suggesting the
-value a checkout's `docker/.env` already carries if it has one. Everything else derives from it.
-Override individually only when something must live elsewhere:
+`ZFIN_DEV_ROOT` has no default: it is the tree you are in, or the one your user file names.
+Everything else derives from it. Override individually only when something must live
+elsewhere:
 
 | variable | defaults to | override when |
 |---|---|---|
@@ -149,7 +141,7 @@ latency and fsync semantics will corrupt PGDATA.
 ## What is deliberately NOT here
 
 **Credentials.** The Claude sidecar token lives at `~/.zfin/claude-token`
-(`ZFIN_CLAUDE_TOKEN_FILE`), and the development TLS certificate's key beside the config file
+(`ZFIN_CLAUDE_TOKEN_FILE`), and the development TLS certificate's key beside your user file
 (`z cert`), both under `$HOME` rather than in this tree. On a shared host the dev
 tree is group-writable so developers can collaborate on worktrees — a credential there would
 hand one person's subscription to everyone with an account.

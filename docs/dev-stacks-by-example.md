@@ -133,13 +133,13 @@ freeze   ls       new      refresh  rm       session  thaw
 ### A new machine: `z scaffold`
 
 ```console
-09:02:11 ryan@laptop:~/zfin-dev/coral$ z feature ls
-ZFIN_DEV_ROOT is the parent directory for this tooling's worktrees, archives and
-caches (docs/dev-tree-layout.md). It is asked once and kept in /Users/ryan/.config/zfin-build-orchestrator/env.
-ZFIN_DEV_ROOT [/Users/ryan/zfin-dev]:
->> saved ZFIN_DEV_ROOT=/Users/ryan/zfin-dev to /Users/ryan/.config/zfin-build-orchestrator/env
+09:02:11 ryan@laptop:~/zfin-dev/zfin$ z feature ls
+No dev tree found at or above here. A dev tree is the directory holding this tooling's
+worktrees, archives and caches (docs/dev-tree-layout.md), marked by a zfin-dev.env file.
+Create one at [/Users/ryan/zfin-dev]:
+>> created /Users/ryan/zfin-dev/zfin-dev.env
 no feature worktrees under /Users/ryan/zfin-dev/worktrees
-09:02:30 ryan@laptop:~/zfin-dev/coral$ z scaffold
+09:02:30 ryan@laptop:~/zfin-dev/zfin$ z scaffold
 >> dev tree root: /Users/ryan/zfin-dev
   created  worktrees
   created  archive
@@ -156,22 +156,23 @@ no feature worktrees under /Users/ryan/zfin-dev/worktrees
   created  mounts/gff3
   created  mounts/hh_atlas
 
->> ZFIN_DEV_ROOT already points here
+>> already a dev tree (/Users/ryan/zfin-dev/zfin-dev.env)
 
 >> mounts/ is empty scaffolding. Point the DOCKER_*_PATH vars at it in docker/.env,
 >> or leave them at whatever this host already uses -- those paths are often shared
 >> with other tooling rather than owned by this tree. See docs/dev-tree-layout.md.
-09:02:41 ryan@laptop:~/zfin-dev/coral$ z config
-config file: /Users/ryan/.config/zfin-build-orchestrator/env
-  ZFIN_DEV_ROOT           /Users/ryan/zfin-dev  [config]
-                            parent of worktrees/, archive/ and cache/ (asked for on first use; no default)
+09:02:41 ryan@laptop:~/zfin-dev/zfin$ z config
+tree file: /Users/ryan/zfin-dev/zfin-dev.env
+user file: /Users/ryan/.config/zfin-build-orchestrator/env  (not created yet)
+  ZFIN_DEV_ROOT           /Users/ryan/zfin-dev  [tree]
+                            the dev tree: where zfin-dev.env is, found by walking up (or --user, from outside one)
   ZFIN_WORKTREES_DIR      -
                             feature worktrees (default: $ZFIN_DEV_ROOT/worktrees)
   ZFIN_ARCHIVE_DIR        -
                             freeze archives, seeds, session history (default: $ZFIN_DEV_ROOT/archive)
   ...
-09:02:50 ryan@laptop:~/zfin-dev/coral$ z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
->> ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive  -> /Users/ryan/.config/zfin-build-orchestrator/env
+09:02:50 ryan@laptop:~/zfin-dev/zfin$ z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
+>> ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive  -> /Users/ryan/zfin-dev/zfin-dev.env
 ```
 
 ---

@@ -27,7 +27,8 @@ the base `docker-compose.yml` and `docker/.env` from there. From anywhere else, 
 `ZFIN_REPO=<checkout>`. Update the tooling with `git pull` in its checkout.
 
 Host settings (where worktrees and archives live, which address and proxy network stacks use)
-are kept in the tool's own config file and managed with `z config`; see
+are kept in the dev tree's `zfin-dev.env` -- found by walking up from where you are -- or in
+your user file, and managed with `z config`; see
 [dev-tree-layout.md](dev-tree-layout.md#configuration). A ZFIN checkout's `docker/.env` holds
 only what its stack is (`ZFIN_RELEASE`, the `DOCKER_*` paths and ports).
 
@@ -215,8 +216,8 @@ cannot reach. The proxy-network overlay, layered after it, sets the name back.
 covering `zfin.org`, `*.<domain>`, `localhost` and `127.0.0.1`. `z feature new` installs it into
 the stack's `tls_certs` (httpd) and `keystore` (tomcat) volumes, so trusting it once covers every
 stack. `z cert` prints where it is and how to trust it; `z cert install [<ticket>]` puts it into a
-stack made before it existed (then `z restart httpd tomcat`). It lives beside the config file,
-under `~/.config/zfin-build-orchestrator/dev-cert/<domain>/`. A stack without it serves the
+stack made before it existed (then `z restart httpd tomcat`). It is per user, beside your user
+file, under `~/.config/zfin-build-orchestrator/dev-cert/<domain>/`. A stack without it serves the
 certificate its own compile container makes (the ZFIN repo's `generate_base.sh`), which differs
 per stack.
 
