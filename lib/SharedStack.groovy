@@ -1,4 +1,6 @@
-// SharedStack -- manage the dedicated shared data stack (Compose project `zfin_shared`):
+// SharedStack -- manage the dedicated shared data stack (Compose project: the
+// ZFIN_SHARED_PROJECT setting, default zfin_shared -- give each dev tree its own in its
+// zfin-dev.env, since project names are global to the Docker host):
 // ONE db + solr, restored from a seed, run here -- and feature stacks created with
 // `z feature new --shared-db` reach them (instead of seeding their own copies) by connecting
 // these shared containers into the feature's own network -- see ZfinUtil.connectSharedData.
@@ -20,6 +22,7 @@ class SharedStack {
         def die = zfinUtil.&die; def info = zfinUtil.&info
         def runCommand = zfinUtil.&runCommand; def captureOutput = zfinUtil.&captureOutput
         def DOCKER = zfinUtil.DOCKER
+        def project = zfinUtil.sharedProject()
 
         def sub  = args ? args[0] : 'status'
         def rest = args.drop(1)
@@ -48,23 +51,36 @@ class SharedStack {
         def platProblem = tag ? zfinUtil.seedPlatformProblem(tag) : null
         if (platProblem && !zfinUtil.allowPlatformMismatch()) zfinUtil.die(platProblem)
 
-        // The shared stack = base + the shared provider overlay, run as project `zfin_shared`
-        // off the base docker/.env. No data overlay: like a feature stack, its volumes are
-        // restored from a seed before anything starts, so the stock db/solr images find their
-        // data already in place.
+        // The shared stack = base + the shared provider overlay, run as `project` off the base
+        // docker/.env. No data overlay: like a feature stack, its volumes are restored from a
+        // seed before anything starts, so the stock db/solr images find their data in place.
         def files = [new File(DOCKER, 'docker-compose.yml'), new File(zfinUtil.COMPOSE, 'docker-compose.overlay-shared.yml')]
-        def compose = ['docker', 'compose', '-p', 'zfin_shared', '--env-file', new File(DOCKER, '.env').absolutePath] +
+        def compose = ['docker', 'compose', '-p', project, '--env-file', new File(DOCKER, '.env').absolutePath] +
                       files.collectMany { ['-f', it.absolutePath] }
         if (tag) {
             zfinUtil.childEnv['ZFIN_SEED'] = tag
         }
+        // Solr at feature sizing, not the base file's production default (16g limit, 12g heap),
+        // which a laptop's Docker VM cannot give it. One solr serving a few read-mostly features
+        // needs no more than one feature's own. A value the base docker/.env sets wins.
+        def baseEnv = new File(DOCKER, '.env')
+        if (!zfinUtil.envField(baseEnv, 'DOCKER_SOLR_MEM_LIMIT')) zfinUtil.childEnv['DOCKER_SOLR_MEM_LIMIT'] = StackConfig.FEATURE_SOLR_MEM
+        if (!zfinUtil.envField(baseEnv, 'DOCKER_SOLR_HEAP'))      zfinUtil.childEnv['DOCKER_SOLR_HEAP']      = StackConfig.FEATURE_SOLR_HEAP
+
+        // ZFIN_SHARED_PROJECT can also point features at a real instance's data; that project
+        // is not this command's to start, stop, freeze or thaw. Nor is a shared stack made by
+        // earlier tooling, which lacks the label -- in particular one another dev tree runs.
+        if (sub in ['up', 'down', 'freeze', 'thaw'] && !zfinUtil.managedSharedStack(project))
+            die("'$project' is not a shared stack z manages: its db has no ${StackConfig.SHARED_DATA_LABEL} label.\n" +
+                "   It may be a real instance, or one another dev tree or older tooling runs. Give this tree\n" +
+                "   its own:  z config set ZFIN_SHARED_PROJECT=<name>   (in this tree's zfin-dev.env)")
 
         // A feature shares this data by having the shared db connected into its own
         // `<project>_default` network, so the sharers are exactly those networks. One
         // derivation, used by up (to warn), freeze (to refuse) and status (to report).
         def sharers = {
             def cid = captureOutput(['docker', 'ps', '-q',
-                '--filter', 'label=com.docker.compose.project=zfin_shared',
+                '--filter', "label=com.docker.compose.project=$project",
                 '--filter', 'label=com.docker.compose.service=db'])
             if (!cid) return []
             captureOutput(['docker', 'inspect', cid, '--format',
@@ -79,7 +95,7 @@ class SharedStack {
         }
 
         def archiveRoot = new File(archDir ?: zfinUtil.archiveDir())
-        def dest = new File(archiveRoot, 'zfin_shared')
+        def dest = new File(archiveRoot, project)
         def manifestFile = new File(dest, StackConfig.FREEZE_MANIFEST)
         def sharedVols = StackConfig.DATA_VOLS
 
@@ -88,7 +104,7 @@ class SharedStack {
                 // Seeding happens HERE, not via an image: `up` on empty volumes restores the
                 // seed first, exactly as `z feature new` does. A stack that already has data
                 // keeps it -- restoring over a live shared tier would discard everyone's work.
-                def seeded = zfinUtil.runQuietly(['docker', 'volume', 'inspect', 'zfin_shared_pg_data']) == 0
+                def seeded = zfinUtil.runQuietly(['docker', 'volume', 'inspect', "${project}_pg_data".toString()]) == 0
                 if (!seeded) {
                     if (!tag) die("no seed found -- capture one (z seed create) or pass --seed <tag>")
                     def seed = zfinUtil.seedDir(tag)
@@ -96,7 +112,7 @@ class SharedStack {
                         if (!zfinUtil.archiveFileFor(seed, vn)) die("seed '$tag' has no $vn tarball ($seed)")
                     }
                     info("shared data tier is empty -- restoring seed '$tag' (this is the one-time copy)")
-                    def res = zfinUtil.restoreVolumes('zfin_shared', StackConfig.DATA_VOLS, seed)
+                    def res = zfinUtil.restoreVolumes(project, StackConfig.DATA_VOLS, seed)
                     def bad = res.findAll { !it.ok }
                     if (bad) die("seed restore failed: ${bad.collect { it.vn }.join(', ')}\n" + bad.collect { it.err }.join('\n'))
                     res.each { r -> info(String.format("restored %s (%.0f MB) in %.1fs", r.vol, r.mb, r.secs)) }
@@ -113,7 +129,7 @@ class SharedStack {
                     System.err.println("   If this recreates db/solr, their connection pools die and they serve 500s.")
                     System.err.println("   Recover with:  z restart tomcat   (in each attached stack)")
                 }
-                info("shared data stack 'zfin_shared' up (tag $tag) -> seeds ONE db+solr copy on network zfin_shared_net")
+                info("shared data stack '$project' up (tag $tag) -> ONE db+solr copy that --shared-db features attach to")
                 runCommand(compose + ['up', '-d'] + StackConfig.DATA_SERVICES)
                 // A RECREATED container keeps none of the network connections the old one had, so
                 // every sharer would silently lose `db`/`solr`. Reattach the ones attached before;
@@ -134,7 +150,7 @@ class SharedStack {
                 // A feature shares this data by having the shared db connected into its own
                 // `<project>_default` network, so the sharers are exactly those networks.
                 def dbcid = captureOutput(['docker', 'ps', '-q',
-                    '--filter', 'label=com.docker.compose.project=zfin_shared',
+                    '--filter', "label=com.docker.compose.project=$project",
                     '--filter', 'label=com.docker.compose.service=db'])
                 if (!dbcid) { info("shared stack not running (z shared up)"); break }
                 def features = captureOutput(['docker', 'inspect', dbcid, '--format',
@@ -175,7 +191,7 @@ class SharedStack {
                 runCommand(compose + ['stop', '-t', '120'] + StackConfig.DATA_SERVICES, [check: false])
 
                 def dbc = captureOutput(['docker', 'ps', '-aq',
-                        '--filter', 'label=com.docker.compose.project=zfin_shared',
+                        '--filter', "label=com.docker.compose.project=$project",
                         '--filter', 'label=com.docker.compose.service=db'])
                 if (dbc) {
                     def clean = false
@@ -188,15 +204,15 @@ class SharedStack {
                                          "refusing to archive an unclean database (--force to override)")
                 }
 
-                def presentShared = sharedVols.findAll { zfinUtil.volumeExists("zfin_shared_${it}") }
+                def presentShared = sharedVols.findAll { zfinUtil.volumeExists("${project}_${it}") }
                 def t0 = System.currentTimeMillis()
                 if (compressShared == null) compressShared = zfinUtil.hasPigz()   // see FeatureFreeze
                 def sext = compressShared ? 'tgz' : 'tar'
-                presentShared.each { vn -> zfinUtil.captureVolume("zfin_shared_${vn}", new File(dest, "${vn}.${sext}"), compressShared) }
+                presentShared.each { vn -> zfinUtil.captureVolume("${project}_${vn}", new File(dest, "${vn}.${sext}"), compressShared) }
                 def secs = (System.currentTimeMillis() - t0) / 1000.0
                 def bytes = presentShared.sum(0L) { new File(dest, "${it}.${sext}").length() } as long
                 manifestFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
-                    slug: 'zfin_shared', project: 'zfin_shared', data: 'archived',
+                    slug: project, project: project, data: 'archived',
                     volumes: presentShared, bytes: bytes, capturedIn: secs, compressed: compressShared,
                     seed: tag,
                     sharersAtFreeze: attachedNow, frozenAt: new Date().format("yyyy-MM-dd HH:mm:ss"),
@@ -212,12 +228,12 @@ class SharedStack {
                 if (!manifestFile.isFile()) die("no shared archive at $dest (--from DIR if elsewhere)")
                 def sm = new groovy.json.JsonSlurper().parse(manifestFile)
                 def svols = (sm.volumes ?: []) as List
-                def already = svols.findAll { zfinUtil.volumeExists("zfin_shared_${it}") }
+                def already = svols.findAll { zfinUtil.volumeExists("${project}_${it}") }
                 if (already && !force)
                     die("these shared volumes already exist: ${already.join(', ')}\n" +
                         "   The shared stack is not frozen. `z shared down --rm-data` first to replace it.")
                 info("thaw shared stack  frozen ${sm.frozenAt}  volumes=${svols.join(', ')}")
-                def res = zfinUtil.restoreVolumes('zfin_shared', svols, dest)
+                def res = zfinUtil.restoreVolumes(project, svols, dest)
                 def bad = res.findAll { !it.ok }
                 if (bad) die("restore failed: ${bad.collect { it.vn }.join(', ')}\n" + bad.collect { it.err }.join('\n'))
                 runCommand(compose + ['up', '-d'] + StackConfig.DATA_SERVICES)

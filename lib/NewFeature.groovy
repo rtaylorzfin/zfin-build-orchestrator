@@ -263,7 +263,7 @@ class NewFeature {
                 else if (tIn) tag = tIn
             }
             if (!('shared' in explicit))
-                doSharedDb = askYesNo(con, "  share the zfin_shared db+solr instead of your own copy (read-mostly)?", false)
+                doSharedDb = askYesNo(con, "  share the ${zfinUtil.sharedProject()} db+solr instead of your own copy (read-mostly)?", false)
             // From here the questions are about what to RUN, so they're phrased in terms of
             // what will actually happen for this tag: a warm snapshot means db+solr+app come
             // up together and dirtydeploy is the natural next step; a cold one means neither.
@@ -297,7 +297,7 @@ class NewFeature {
         // own-data path checks for one itself (below) before anything has been created.
         info(tag ? "seed: $tag"
                  : noSeed ? "seed: none -- COLD stack, db and solr start empty"
-                 : doSharedDb ? "seed: none (--shared-db shares the zfin_shared data tier)"
+                 : doSharedDb ? "seed: none (--shared-db shares the ${zfinUtil.sharedProject()} data tier)"
                  : "seed: none found on this host")
 
 // --shared-db: this feature runs NO local db/solr (see docker-compose.overlay-shared-db.yml), so it
@@ -313,7 +313,7 @@ class NewFeature {
 
         if (doSharedDb) {
             // What must be true is that the shared db+solr are RUNNING -- not that a network
-            // object exists. Those are different: zfin_shared_net outlives `z shared down`
+            // object exists. Those are different: the shared stack's network outlives `z shared down`
             // whenever a feature is still attached to it (Docker refuses to remove an in-use
             // network), so the old `network inspect` guard passed happily with no data tier at
             // all, and provisioning then "succeeded" into a stack that cannot reach a database.
@@ -325,23 +325,21 @@ class NewFeature {
                 }
             }
             if (!sharedRunning()) {
-                // `z shared up` manages exactly ONE project: the dedicated zfin_shared stack
-                // whose compose files it owns. When ZFIN_SHARED_PROJECT points elsewhere -- a
-                // real instance like `cell` -- auto-starting is worse than wrong, it is
-                // misleading: it would boot and seed ~28G into zfin_shared, then re-check the
-                // OTHER project, still find nothing, and die. Refuse up front. Someone else's
-                // instance is theirs to start.
-                if (zfinUtil.sharedProject() != 'zfin_shared')
+                // `z shared up` starts only a shared stack it manages (labelled, or not yet
+                // created). When ZFIN_SHARED_PROJECT names anything else -- a real instance like
+                // `cell`, or a shared stack another tree runs -- it is not ours to start.
+                if (!zfinUtil.managedSharedStack(zfinUtil.sharedProject()))
                     die("--shared-db points at the '${zfinUtil.sharedProject()}' project, which is not running.\n" +
-                        "   That is a real instance's stack, not the dedicated shared one, so `z shared up`\n" +
-                        "   cannot start it. Bring it up (or thaw it) yourself, then re-run.\n" +
+                        "   It is not a shared stack z manages (a real instance, or another tree's), so\n" +
+                        "   `z shared up` cannot start it. Bring it up yourself, or give this tree its own:\n" +
+                        "     z config set ZFIN_SHARED_PROJECT=<name>\n" +
                         "   Nothing was created for this feature.")
                 // Start it rather than refuse. Asking for --shared-db IS asking to use the
                 // shared stack, so having it running is a precondition of the request, not a
                 // separate decision -- and `z shared up` is idempotent and binds no host ports.
                 // Auto-start what affects only itself; refuse for what takes a host-wide
                 // resource, such as ports another stack may hold.
-                def seeded = zfinUtil.runQuietly(['docker', 'volume', 'inspect', 'zfin_shared_pg_data']) == 0
+                def seeded = zfinUtil.volumeExists("${zfinUtil.sharedProject()}_pg_data")
                 info(seeded ? "shared data stack is down -- starting it (volumes already seeded)"
                             : "shared data stack has never run -- starting it; this SEEDS ~19G db + ~9G solr once")
                 new SharedStack().run(['up'] + (tag ? ['--tag', tag] : []), zfinUtil)
@@ -351,11 +349,11 @@ class NewFeature {
             }
             def src = zfinUtil.sharedProject()
             info("shared db+solr: using the '$src' stack (no per-feature copy)")
-            if (src != 'zfin_shared') {
-                // Pointing at a real instance rather than the dedicated shared stack. Worth
-                // more than the usual shared-writes note: this is someone's working database,
-                // and a liquibase migration or a curation edit from this branch lands in it.
-                System.err.println("!! '$src' is not the dedicated shared stack -- this feature will read AND WRITE")
+            if (!zfinUtil.managedSharedStack(src)) {
+                // Pointing at a real instance rather than a shared stack z runs. Worth more than
+                // the usual shared-writes note: this is someone's working database, and a
+                // liquibase migration or a curation edit from this branch lands in it.
+                System.err.println("!! '$src' is not a shared stack z manages -- this feature will read AND WRITE")
                 System.err.println("   a live instance's database. A schema migration (gradle liquibasePostBuild)")
                 System.err.println("   or any curation edit here hits that instance. Read-mostly work only.")
             }
@@ -778,15 +776,15 @@ class NewFeature {
 // skip the block entirely -- so every line below is either something still left to do or
 // something that failed and needs re-running.
         def imagesLine = doSharedDb
-                ? "     data     : SHARED zfin_shared db/solr (connected into ${project}_default)" + (warmApp ? "  + warm app (seed $tag)" : "")
+                ? "     data     : SHARED ${zfinUtil.sharedProject()} db/solr (connected into ${project}_default)" + (warmApp ? "  + warm app (seed $tag)" : "")
                 : cold ? "     data     : own copy, COLD -- db and solr are empty until loaded"
                 : (warmApp ? "     data     : own copy, restored from seed '$tag'  + warm app tier"
                 : "     data     : own copy, restored from seed '$tag'")
         def bringUp = doSharedDb
                 ? (warmApp
                 ? (doUp ? "  # tomcat+httpd up, serving $base's deploy on the SHARED db/solr at $url"
-                : "  z up tomcat httpd                  # app tier (data is the shared zfin_shared stack)")
-                : "  # data tier is the shared zfin_shared stack (needs `z shared up`); build+deploy, then z up tomcat httpd")
+                : "  z up tomcat httpd                  # app tier (data is the shared ${zfinUtil.sharedProject()} stack)")
+                : "  # data tier is the shared ${zfinUtil.sharedProject()} stack (needs `z shared up`); build+deploy, then z up tomcat httpd")
                 : cold
                 ? "  z build load-db load-solr          # COLD: load db + solr first (starts them itself)"
                 : (doUp

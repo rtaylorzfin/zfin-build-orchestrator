@@ -893,9 +893,9 @@ branch 'someones-branch' set up to track 'origin/someones-branch'.
 >>   [2/2] pg_data           3558 MB in  77.2s
 >> restored zfin_shared_pg_data (3558 MB) in 77.2s
 >> restored zfin_shared_solr_var (3175 MB) in 60.8s
->> shared data stack 'zfin_shared' up (tag 2026-09-29) -> seeds ONE db+solr copy on network zfin_shared_net
+>> shared data stack 'zfin_shared' up (tag 2026-09-29) -> ONE db+solr copy that --shared-db features attach to
 [+] up 3/3
- ✔ Network zfin_shared_net        Created     0.0s
+ ✔ Network zfin_shared_shared     Created     0.0s
  ✔ Container zfin_shared-db-1     Started     0.7s
  ✔ Container zfin_shared-solr-1   Started     0.8s
 >> attach features with: z feature new <ticket> --shared-db
@@ -954,7 +954,7 @@ zfin_shared-solr-1   ghcr.io/zfin/zfin-solr:main   "docker-entrypoint.s…"   so
 !! 3 feature(s) are attached to this shared data tier: zfin-10453, zfin-10485, zfin-2002
    If this recreates db/solr, their connection pools die and they serve 500s.
    Recover with:  z restart tomcat   (in each attached stack)
->> shared data stack 'zfin_shared' up (tag 2026-09-29) -> seeds ONE db+solr copy on network zfin_shared_net
+>> shared data stack 'zfin_shared' up (tag 2026-09-29) -> ONE db+solr copy that --shared-db features attach to
 [+] up 2/2
  ✔ Container zfin_shared-db-1     Running     0.0s
  ✔ Container zfin_shared-solr-1   Running     0.0s

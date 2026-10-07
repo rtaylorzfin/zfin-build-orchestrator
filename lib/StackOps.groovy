@@ -213,13 +213,13 @@ class StackOps {
                     println "\none-off containers (z run):"
                     runners.readLines().each { println "  ${it.replace('\t', '   ')}" }
                 }
-                // A --shared-db stack's data tier lives in the separate `zfin_shared` project,
+                // A --shared-db stack's data tier lives in the separate shared project,
                 // so `docker compose ps` above won't list it. Show it explicitly.
                 if (zfinUtil.stackVar('COMPOSE_FILE')?.contains('shared-db.yml')) {
                     def proj = zfinUtil.stackVar('COMPOSE_PROJECT_NAME')
-                    println "\nshared data (project zfin_shared, connected into ${proj}_default):"
+                    println "\nshared data (project ${zfinUtil.sharedProject()}, connected into ${proj}_default):"
                     new ProcessBuilder(['docker', 'ps', '-a',
-                        '--filter', 'label=com.docker.compose.project=zfin_shared',
+                        '--filter', "label=com.docker.compose.project=${zfinUtil.sharedProject()}".toString(),
                         '--format', 'table {{.Names}}\t{{.Status}}\t{{.Image}}']).inheritIO().start().waitFor()
                 }
                 break

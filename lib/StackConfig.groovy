@@ -87,6 +87,10 @@ class StackConfig {
     static final List<String> APP_TIER_VOLUMES = ['www_data', 'catalina_base']
     static final long         APP_TIER_MIN_BYTES = 1_000_000
 
+    // On a shared stack's db and solr (docker-compose.overlay-shared.yml): what tells a stack
+    // `z shared` runs from a real instance that ZFIN_SHARED_PROJECT may also name.
+    static final String SHARED_DATA_LABEL = 'zfin.devstack.shared-data'
+
     static final String FEATURE_SOLR_MEM  = '6g'
     static final String FEATURE_SOLR_HEAP = '4g'
     static Map<String, String> featureEnv(String gitCommon = null, String gitDir = null) {

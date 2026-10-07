@@ -378,24 +378,34 @@ Read-mostly features (UI/JSP/React work, browsing) don't each need their own ~19
 ~9G solr copy. `--shared-db` points them at one shared copy:
 
 ```bash
-z shared up                             # restore a seed into db+solr ONCE (project zfin_shared,
-                                        #   net zfin_shared_net) -- one copy for all sharers
+z shared up                             # restore a seed into db+solr ONCE -- one copy for all sharers
 z feature new ZFIN-1 --shared-db --up
 z feature new ZFIN-2 --shared-db --up   # both reach the SAME db/solr
 z shared status                         # what's attached;  z shared down [--rm-data] to stop
 ```
 
-How it works: the dedicated `zfin_shared` stack runs db+solr once. A `--shared-db` feature
+How it works: one shared stack runs db+solr, from the base compose file plus
+`docker-compose.overlay-shared.yml`: no published ports, Solr at feature sizing (6g limit, 4g
+heap, unless the main checkout's `docker/.env` says otherwise). A `--shared-db` feature
 uses `docker-compose.overlay-shared-db.yml`, which
 profile-suppresses its own db/solr so no per-feature copy is seeded. To reach the shared
 data, `z feature new --shared-db` (and `z up`) **connect the shared db/solr containers into
 the feature's own default network** with aliases `db`/`solr`, so the webapp's `db`/`solr`
-hostnames resolve to them. The feature's app tier stays *single-homed*: an earlier design
-attached the app tier to the shared network instead, but multi-homing the tomcat container
+hostnames resolve to them. The feature's app tier stays *single-homed*, deliberately:
+attaching it to the shared stack's network instead would multi-home the tomcat container, which
 is fatal — catalina sets `-Djava.rmi.server.hostname=$(container ip)`, and with two networks
 that expands to two IPs, the second leaking in as a bare java arg (`Could not find or load
 main class 172.x`). Postgres/solr don't care about being on several networks, so we attach
 *them* to each feature's network instead.
+
+**Which stack, and why it is labelled.** The shared stack's Compose project is the
+`ZFIN_SHARED_PROJECT` setting, default `zfin_shared`. Project names are global to the Docker
+host, so two dev trees on one host should each set their own in their `zfin-dev.env`
+(`z config set ZFIN_SHARED_PROJECT=<name>`), or they would share one stack. The same setting can
+instead point features at a real instance's data. To tell the two apart, the shared overlay
+labels its db and solr `zfin.devstack.shared-data=true`: `z shared up|down|freeze|thaw` refuse a
+project whose db lacks it -- a real instance, or a shared stack another tree or older tooling
+runs -- and `z feature new --shared-db` warns that it is about to write a live database.
 
 **The hard constraint — shared data == shared writes.** All sharers read/write the *same*
 `zfindb` and solr index, so a `liquibasePostBuild` migration, a reindex, or a curation edit

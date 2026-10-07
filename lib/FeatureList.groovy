@@ -32,7 +32,7 @@ class FeatureList {
         def row = { a, b, c, d, e, f -> println String.format("%-16s %-22s %-6s %-6s %-38s %s", a, b, c, d, e, f) }
         row('PROJECT', 'BRANCH', 'DATA', 'STATE', 'URL', 'WORKTREE')
         shown.each { st -> row(st.project, st.branch, st.data, st.state, st.url, st.worktree) }
-        println "\nDATA: own = this stack's own db+solr copy; shared = the zfin_shared stack"
+        println "\nDATA: own = this stack's own db+solr copy; shared = the ${zfinUtil.sharedProject()} stack"
         if (shown.any { it.state == 'partial' })
             println "STATE: partial = containers running but no httpd, so the URL will not answer (z up)"
         if (!all && !frozenOnly && frozen)

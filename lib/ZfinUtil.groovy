@@ -603,6 +603,18 @@ class ZfinUtil {
      */
     String sharedProject() { setting('ZFIN_SHARED_PROJECT', 'zfin_shared') }
 
+    /** Is `project` a shared data stack `z shared` runs -- its db carries SHARED_DATA_LABEL --
+     *  or one that does not exist yet, which `z shared up` may create? False for a real
+     *  instance's project, and for a stack made by earlier tooling without the label. Looks at
+     *  stopped containers too, and, with none at all, at whether its pg_data volume exists. */
+    boolean managedSharedStack(String project) {
+        def cid = captureOutput(['docker', 'ps', '-aq', '--filter', "label=com.docker.compose.project=$project",
+                                 '--filter', 'label=com.docker.compose.service=db']).readLines().find { it }
+        if (cid) return captureOutput(['docker', 'inspect', cid, '--format',
+                "{{index .Config.Labels \"${StackConfig.SHARED_DATA_LABEL}\"}}"]) == 'true'
+        !volumeExists("${project}_pg_data")
+    }
+
     /** How to install a tool. Names BOTH platforms rather than detecting one: whoever reads
      *  this is often setting up a different machine from the one that printed it. Deliberately
      *  vague about the Linux package manager rather than guessing between apt/dnf/yum. */
