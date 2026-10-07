@@ -172,7 +172,7 @@ class FreshInstall {
             if (code != 0) die("step ${i + 1} failed ($code)", code)
         }
         info("fresh install complete. Put z on PATH, with tab completion, once in ~/.bashrc:")
-        info("  ${new File(zfinUtil.HOME, 'z')} shell-init >> ~/.bashrc")
+        info("  eval \"\$(${new File(zfinUtil.HOME, 'z')} shell-init)\"     (this shell; append its output to ~/.bashrc for every shell)")
         if (firstTicket) info("...your feature: cd ${new File(zfinUtil.worktreesDir(), firstTicket.toLowerCase())} (z commands resolve it from there)")
     }
 }

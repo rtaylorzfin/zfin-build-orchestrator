@@ -17,10 +17,14 @@ This tooling is opt-in and lives in its own checkout, beside your ZFIN checkouts
 inside one. Install it once per host:
 
 ```bash
-git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git ~/zfin-dev/orchestrator
-~/zfin-dev/orchestrator/z shell-init >> ~/.bashrc     # z on PATH + tab completion
-~/zfin-dev/orchestrator/z scaffold --root ~/zfin-dev  # the dev tree; says where to clone ZFIN
+cd ~/zfin-dev
+git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git orchestrator
+eval "$(./orchestrator/z shell-init)"    # z on PATH + tab completion, for this shell
+z scaffold --root ~/zfin-dev             # the dev tree; says where to clone ZFIN
 ```
+
+`eval` sets up the current shell only, so run it in each new shell, or append the same output
+to your startup file once: `./orchestrator/z shell-init >> ~/.bashrc`.
 
 Needs `groovy`, Docker with Compose v2, and git on the host. `z` then works from inside any
 ZFIN checkout or feature worktree: it asks git which checkout you are standing in, and takes

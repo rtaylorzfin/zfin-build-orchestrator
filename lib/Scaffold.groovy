@@ -102,7 +102,7 @@ class Scaffold {
             println ""
             info("this tooling runs from ${zfinUtil.HOME}. Its suggested home is ${orch}:")
             println "     git clone ${zfinUtil.captureOutput(['git', '-C', zfinUtil.HOME.absolutePath, 'remote', 'get-url', 'origin']) ?: '<orchestrator repo URL>'} ${orch}"
-            println "     ${orch}/z shell-init >> ~/.bashrc"
+            println "     eval \"\$(${orch}/z shell-init)\""
         }
 
         if (doMounts) {

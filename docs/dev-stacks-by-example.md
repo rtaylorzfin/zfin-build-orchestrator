@@ -117,7 +117,7 @@ case ":$PATH:" in *":/opt/zfin/source_roots/stacks/orchestrator:"*) ;; *) export
 
 # Tab completion: subcommands, service names, and each subcommand's flags.
 source "/opt/zfin/source_roots/stacks/orchestrator/lib/z-completion.bash"
-14:49:10 ryan@mac:.../stacks$ orchestrator/z shell-init >> ~/.bashrc && source ~/.bashrc
+14:49:10 ryan@mac:.../stacks$ eval "$(./orchestrator/z shell-init)"
 14:49:12 ryan@mac:.../worktrees/main$ type z
 z is /opt/zfin/source_roots/stacks/orchestrator/z
 14:49:15 ryan@mac:.../worktrees/main$ z <TAB><TAB>
