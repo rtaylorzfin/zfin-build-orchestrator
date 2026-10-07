@@ -17,8 +17,9 @@ This tooling is opt-in and lives in its own checkout, beside your ZFIN checkouts
 inside one. Install it once per host:
 
 ```bash
-git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git ~/zfin-dev/zfin-build-orchestrator
-~/zfin-dev/zfin-build-orchestrator/z shell-init >> ~/.bashrc     # z on PATH + tab completion
+git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git ~/zfin-dev/orchestrator
+~/zfin-dev/orchestrator/z shell-init >> ~/.bashrc     # z on PATH + tab completion
+~/zfin-dev/orchestrator/z scaffold --root ~/zfin-dev  # the dev tree; says where to clone ZFIN
 ```
 
 Needs `groovy`, Docker with Compose v2, and git on the host. `z` then works from inside any
@@ -44,7 +45,7 @@ the hooks this tooling needs (update it), and a newer one needs newer tooling (`
 ## The idea in one picture
 
 ```
-  z seed create    ──captures──▶  $ZFIN_ARCHIVE_DIR/seeds/<tag>/
+  z seed create    ──captures──▶  $ZFIN_SEEDS_DIR/<tag>/
   (once per host, from            pg_data.tgz  solr_var.tgz   (loaded DB + Solr index)
    a DEPLOYED stack)              www_data.tgz catalina_base.tgz ...  (the app tier)
                                   seed.json     (checksums + the postgres major)
@@ -454,11 +455,11 @@ sudo ifconfig lo0 -alias <ip>     # (macOS only) drop the loopback alias
 ## Data-sensitivity guardrail
 
 Seeds carry a **real loaded ZFIN database**. They live on storage you control
-(`$ZFIN_ARCHIVE_DIR/seeds/`), and there is deliberately **no upload path**: keeping the data
+(`$ZFIN_SEEDS_DIR`), and there is deliberately **no upload path**: keeping the data
 off any registry is structural, not a policy someone has to remember. Do not add one.
 
-Freeze archives and sidecar session archives sit beside them under the same root and carry the
-same expectation. Putting that root on NFS is supported and encouraged; putting it anywhere
+Freeze archives and sidecar session archives (`$ZFIN_ARCHIVE_DIR`) carry the same expectation.
+Putting either on NFS is supported and encouraged; putting it anywhere
 publicly reachable is not.
 
 ---

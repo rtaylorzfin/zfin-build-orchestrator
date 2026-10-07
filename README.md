@@ -10,8 +10,9 @@ healthchecks); nothing in it requires this tooling.
 Groovy only, run on the host. Needs `groovy`, Docker with Compose v2, and git.
 
 ```bash
-git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git ~/zfin-dev/zfin-build-orchestrator
-~/zfin-dev/zfin-build-orchestrator/z shell-init >> ~/.bashrc
+git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git ~/zfin-dev/orchestrator
+~/zfin-dev/orchestrator/z shell-init >> ~/.bashrc
+~/zfin-dev/orchestrator/z scaffold --root ~/zfin-dev
 ```
 
 | | |

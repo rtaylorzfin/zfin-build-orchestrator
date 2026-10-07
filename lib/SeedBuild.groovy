@@ -315,8 +315,7 @@ class SeedBuild {
         // whose free space the JVM reports poorly.
         def dirBytes = { File d -> long n = 0; d.eachFileRecurse(groovy.io.FileType.FILES) { n += it.length() }; n }
         long want = (dump.length() + dirBytes(snap)) / 2
-        def archive = new File(zfinUtil.archiveDir())
-        def probe = archive; while (probe && !probe.exists()) probe = probe.parentFile
+        def probe = zfinUtil.seedsDir(); while (probe && !probe.exists()) probe = probe.parentFile
         if (probe && probe.usableSpace < want)
             System.err.println(String.format("!! %s has %.1fG free; this seed will need roughly %.1fG.",
                     probe, probe.usableSpace / 1073741824.0, want / 1073741824.0))

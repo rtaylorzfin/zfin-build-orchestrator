@@ -25,17 +25,20 @@ Run `z` with no tree to be found and, on a terminal, it offers to create one.
 
 ```
 $ZFIN_DEV_ROOT/                  e.g. ~/zfin-dev  or  /opt/zfin-dev
-├── zfin-build-orchestrator/     this tooling: one install serves every checkout below.
-├── <checkout>/                  a ZFIN checkout, named however you like: `z` asks git
-│                                where it is, so it need not live here at all.
-├── worktrees/
-│   ├── zfin-10358/              one per feature; the directory name IS the ticket
+├── zfin-dev.env                 marks the tree; its settings (z config)
+├── orchestrator/                this tooling, cloned by you; one install serves the host
+├── worktrees/                   every ZFIN checkout, side by side
+│   ├── main/                    the main checkout: owns .git, holds docker/.env, supplies
+│   │                            every stack's base compose file. Cloned by you; keep it on main
+│   ├── zfin-10358/              a feature: a linked worktree, named for its ticket
 │   └── zfin-10475/
-├── archive/                     freeze archives + sidecar session history
-│   ├── <ticket>/                a frozen stack's volumes
-│   └── sessions/
-├── seeds/                       (under archive/) captured stack volumes, restored into new stacks
-└── mounts/                      the host paths bind-mounted into containers
+├── seeds/                       captured stacks, restored into new ones (z seed)
+│   └── <tag>/
+├── archive/                     parked state
+│   ├── <ticket>/                a frozen stack's volumes (z feature freeze)
+│   └── sessions/                sidecar session history (z feature session)
+├── cache/                       z seed build's staging; safe to delete
+└── mounts/                      optional: host paths bind-mounted into containers
     ├── unloads/{db,solr}        DOCKER_DB_UNLOADS_PATH / DOCKER_SOLR_UNLOADS_PATH
     ├── research/                DOCKER_RESEARCH_PATH
     ├── blast/                   DOCKER_BLASTSERVER_BLAST_DATABASE_PATH, DOCKER_ABBLAST_PATH
@@ -49,15 +52,26 @@ One thing to back up, relocate, or delete.
 
 ---
 
-## Worktrees: `worktrees/<ticket>`, no prefix
+## Worktrees: every checkout side by side
 
-Earlier versions used `wt-<ticket>` directories as siblings of the checkout. With a handful
-of tickets in flight that clutters the parent, and the prefix exists only to tell worktrees
-apart from everything else beside them.
+`worktrees/` holds every ZFIN checkout at one depth: the **main checkout**, `worktrees/main`,
+and each feature beside it, `worktrees/<ticket>`. These are git's own terms -- the main worktree
+owns `.git`, and each feature is a *linked* worktree whose `.git` is a file pointing into it.
 
-A dedicated `worktrees/` directory makes the prefix redundant, so the directory name is just
-the ticket. A worktree is now identified by **having a provisioned `docker/.env`**, which is
-a better test than a name prefix anyway — it cannot mistake a stray directory for a stack.
+That distinction is how the tooling tells them apart: **a feature is a linked worktree with a
+provisioned `docker/.env`**. The main checkout has a `docker/.env` too, for its own stack, but
+its `.git` is a directory, so `z feature ls` never lists it and `z feature rm main` or
+`z feature new main` refuse.
+
+The main checkout's role is to supply every stack's base `docker-compose.yml` and the
+`docker/.env` each new feature's starts from. Keep it on `main`: the tooling does not require
+it, but whatever branch is checked out there is the compose file every stack uses -- a branch
+older than `x-zfin-compose-version` makes `z` refuse until you switch back. `docker/.env` is
+untracked, so switching branches leaves it alone. Git allows a branch to be checked out in one
+place at a time, so a feature cannot use the branch `main/` currently has.
+
+`z` finds the main checkout by asking git, so this layout is a recommendation: a checkout kept
+elsewhere works too, with the tree named in your user file (see Configuration).
 
 ---
 
@@ -90,6 +104,7 @@ elsewhere:
 |---|---|---|
 | `ZFIN_WORKTREES_DIR` | `$ZFIN_DEV_ROOT/worktrees` | rarely |
 | `ZFIN_CACHE_DIR` | `$ZFIN_DEV_ROOT/cache` | rarely (`z seed build` stages its inputs and worktree here) |
+| `ZFIN_SEEDS_DIR` | `$ZFIN_DEV_ROOT/seeds` | **seeds on NFS, or shared between trees** |
 | `ZFIN_ARCHIVE_DIR` | `$ZFIN_DEV_ROOT/archive` | **archives on NFS or an external disk** |
 
 The `DOCKER_*_PATH` mounts stay individually configured, because they are often *shared*
@@ -127,6 +142,7 @@ Two ways, and they are not equivalent:
 
 ```bash
 z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
+z config set ZFIN_SEEDS_DIR=/Volumes/backup/zfin-seeds
 ```
 
 **Symlink** the directory. Works on Linux. Under Docker Desktop for macOS a bind source that
@@ -148,8 +164,8 @@ hand one person's subscription to everyone with an account.
 
 **Docker volumes.** Per-stack volumes live wherever the Docker daemon keeps them, and cannot
 be relocated to NFS -- overlayfs needs a local upper directory, and a database must never run
-off NFS regardless. What *can* live there is `archive/`, which holds both the freeze archives
-and `seeds/`: those are ordinary tarballs, and moving them is the whole point of the feature.
+off NFS regardless. What *can* live there is `seeds/` and `archive/`: ordinary tarballs, and
+moving them is the whole point of the feature.
 
 ---
 

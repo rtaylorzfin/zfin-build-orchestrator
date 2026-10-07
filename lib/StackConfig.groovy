@@ -37,7 +37,8 @@ class StackConfig {
     static final Map<String, String> HOST_SETTINGS = [
         ZFIN_DEV_ROOT         : 'the dev tree: where zfin-dev.env is, found by walking up (or --user, from outside one)',
         ZFIN_WORKTREES_DIR    : 'feature worktrees (default: $ZFIN_DEV_ROOT/worktrees)',
-        ZFIN_ARCHIVE_DIR      : 'freeze archives, seeds, session history (default: $ZFIN_DEV_ROOT/archive)',
+        ZFIN_SEEDS_DIR        : 'seeds new stacks restore from (default: $ZFIN_DEV_ROOT/seeds)',
+        ZFIN_ARCHIVE_DIR      : 'freeze archives and sidecar session history (default: $ZFIN_DEV_ROOT/archive)',
         ZFIN_CACHE_DIR        : 'download caches (default: $ZFIN_DEV_ROOT/cache)',
         ZFIN_SEED             : 'seed a new feature or the shared stack restores (default: the newest)',
         ZFIN_FEATURE_BIND     : 'address feature stacks publish their ports on (default: 127.0.0.1)',

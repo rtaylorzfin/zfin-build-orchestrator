@@ -162,11 +162,16 @@ class ZfinUtil {
          data    : overlays.any { it.contains('shared-db') } ? 'shared' : 'own']
     }
 
-    /** Is `dir` a feature worktree (rather than a checkout's own stack)? A directory directly
-     *  under the worktrees dir, or an old `wt-` sibling. Never dies: this runs for `z help`
-     *  and `z status` on a host whose ZFIN_DEV_ROOT is not set yet. */
+    /** Is `dir` a linked git worktree -- its .git a FILE pointing into the main repo? The main
+     *  checkout's .git is a directory. This is what tells a feature from the main checkout,
+     *  which sits beside the features under worktrees/ (as worktrees/main) but is not one. */
+    static boolean isLinkedWorktree(File dir) { new File(dir, '.git').isFile() }
+
+    /** Is `dir` a feature worktree (rather than a checkout's own stack)? A linked worktree
+     *  directly under the worktrees dir. Never dies: this runs for `z help` and `z status` on
+     *  a host with no dev tree yet. */
     boolean isFeatureTree(File dir) {
-        if (dir.name.startsWith('wt-')) return true
+        if (!isLinkedWorktree(dir)) return false
         def root = setting('ZFIN_WORKTREES_DIR') ?: (setting('ZFIN_DEV_ROOT') ? "${setting('ZFIN_DEV_ROOT')}/worktrees" : null)
         if (!root) return false
         def wts = new File(root.replaceFirst('^~', System.getProperty('user.home'))).canonicalFile
@@ -539,10 +544,10 @@ class ZfinUtil {
      *  url (see stackUrls). */
     List<Map> featureStacks() {
         def wtParent = new File(worktreesDir())
-        // A worktree IS a directory with a provisioned docker/.env -- a better test than a
-        // name prefix, which could not tell a stack from any other directory someone left here.
+        // A feature IS a linked worktree with a provisioned docker/.env. Linked, because the
+        // main checkout sits here too (worktrees/main) with a docker/.env of its own.
         def wts = ((wtParent.listFiles() ?: []) as List)
-                .findAll { it.isDirectory() && new File(it, 'docker/.env').isFile() }.sort { it.name }
+                .findAll { it.isDirectory() && isLinkedWorktree(it) && new File(it, 'docker/.env').isFile() }.sort { it.name }
         // "up" means SERVING, so it is keyed on httpd -- the service that answers the URL in
         // the same row. Keyed on any container with the project label, a `z run claude` sidecar
         // or a stray `z run compile` made a stack read as up while its URL returned 503 from the
@@ -565,11 +570,11 @@ class ZfinUtil {
         def archiveRoot = new File(archiveDir())
         wts.collect { wt ->
             def envF   = new File(wt, 'docker/.env')
-            def proj   = envField(envF, 'COMPOSE_PROJECT_NAME') ?: wt.name.replaceFirst('^wt-', '')
+            def proj   = envField(envF, 'COMPOSE_PROJECT_NAME') ?: wt.name
             def host   = envField(envF, 'DOCKER_VIRTUAL_HOST')
             def branch = captureOutput(['git', '-C', wt.absolutePath, 'rev-parse', '--abbrev-ref', 'HEAD']) ?: '?'
             def spec   = stackSpec(wt)
-            [ slug    : wt.name.replaceFirst('^wt-', ''),
+            [ slug    : wt.name,
               project : proj,
               branch  : branch,
               host    : host,
@@ -610,9 +615,9 @@ class ZfinUtil {
      *  cwd. Typing the ticket while standing in its own directory is the kind of redundancy
      *  that makes a tool feel like paperwork.
      *
-     *  Resolved from the worktree's own docker/.env, falling back to the wt- directory-name
-     *  convention when that is missing or unreadable -- which is exactly when you are most
-     *  likely to be repairing it. Returns null in the MAIN
+     *  Resolved from the worktree's own docker/.env, falling back to the directory's name
+     *  when that is missing or unreadable -- which is exactly when you are most likely to be
+     *  repairing it. Returns null in the MAIN
      *  checkout: that is not a feature, and inferring one there would be a guess. */
     String featureSlugFromCwd(File cwd = new File('.').canonicalFile) {
         def top = captureOutput(['git', '-C', cwd.absolutePath, 'rev-parse', '--show-toplevel'])
@@ -622,9 +627,9 @@ class ZfinUtil {
         def spec = stackSpec(dir)
         if (spec?.project) return spec.project
         // Fallback for a worktree whose .env is missing or unreadable -- which is exactly when
-        // you are most likely to be repairing it. A directory under the worktrees dir IS a
-        // feature, and its name is the slug.
-        dir.parentFile?.canonicalFile == new File(worktreesDir()).canonicalFile ? dir.name : null
+        // you are most likely to be repairing it. A linked worktree under the worktrees dir IS
+        // a feature, and its name is the slug.
+        isLinkedWorktree(dir) && dir.parentFile?.canonicalFile == new File(worktreesDir()).canonicalFile ? dir.name : null
     }
 
     /** Archive the sidecar's session history for a stack, returning the tarball or null when
@@ -740,7 +745,9 @@ class ZfinUtil {
      *  `z feature new --seed`. A SIBLING of the per-stack freeze archives and of sessions/,
      *  never inside one -- `z feature rm` deletes a stack's freeze archive, and a seed (hours
      *  of loading, shared by every stack on the host) must survive that. */
-    File seedsDir() { new File(archiveDir(), 'seeds') }
+    /** Captured stacks that new stacks restore from: active inputs, kept apart from archive/
+     *  (parked state). Its own override, since seeds and archives may each want to live on NFS. */
+    File seedsDir() { new File(setting('ZFIN_SEEDS_DIR') ?: "${devRoot()}/seeds") }
     File seedDir(String tag) { new File(seedsDir(), tag) }
 
     /** Newest seed on this host, or null. Lets `--seed` be optional: the common case is "the
@@ -859,8 +866,8 @@ class ZfinUtil {
      *  that does not exist. Naming the known slugs costs one `ls` and answers the likely typo. */
     void requireFeature(String slug) {
         def known = ((new File(worktreesDir()).listFiles() ?: []) as List)
-                .findAll { it.isDirectory() && new File(it, 'docker/.env').isFile() }
-                *.name.collect { it.replaceFirst('^wt-', '') }.sort()
+                .findAll { it.isDirectory() && isLinkedWorktree(it) && new File(it, 'docker/.env').isFile() }
+                *.name.sort()
         if (slug in known) return
         die("no such feature: ${slug}\n" +
             (known ? "   known: ${known.join(', ')}" : "   none on this host yet -- z feature new <ticket>"))

@@ -44,12 +44,10 @@ class Scaffold {
             die("$root exists and is not a directory.")
 
         // The tree. Every directory here is named by a ZfinUtil accessor and read by something
-        // -- worktreesDir(), archiveDir(), seedsDir(), cacheDir(), the mount paths. A `repos/`
-        // used to sit alongside them for the checkout itself; it was dropped because nothing
-        // created into it and nothing read it, so it documented a convention rather than
-        // serving the tooling, and no host actually followed it. Where the checkout lives is
-        // found by asking git, not by looking in a fixed place.
-        def dirs = ['worktrees',
+        // -- worktreesDir(), seedsDir(), archiveDir(), cacheDir(), the mount paths. Not the
+        // checkouts themselves: they are clones you make (see the suggestions at the end), and
+        // the tooling finds them by asking git, not by looking in a fixed place.
+        def dirs = ['worktrees', 'seeds',
                     'archive', 'archive/sessions',
                     'cache']
         if (doMounts) dirs += ['mounts', 'mounts/unloads', 'mounts/unloads/db', 'mounts/unloads/solr',
@@ -88,6 +86,23 @@ class Scaffold {
             def recorded = zfinUtil.markTree(root)
             info("created $marker -- this directory is now a dev tree")
             if (recorded) info("recorded it as this user's ZFIN_DEV_ROOT (${zfinUtil.userConfigFile()}), since it is not above here")
+        }
+
+        // Suggestions, never actions: which remote and credentials to clone with are yours.
+        def main = new File(root, 'worktrees/main')
+        def orch = new File(root, 'orchestrator')
+        if (!new File(main, '.git').isDirectory()) {
+            def url = zfinUtil.captureOutput(['git', 'remote', 'get-url', 'origin']) ?: '<ZFIN repo URL>'
+            println ""
+            info("the main ZFIN checkout goes beside the features, at worktrees/main. Clone it there:")
+            println "     git clone ${url} ${main}"
+            println "   and give it a docker/.env (see docs/dev-tree-layout.md)."
+        }
+        if (zfinUtil.HOME.canonicalFile != orch.canonicalFile) {
+            println ""
+            info("this tooling runs from ${zfinUtil.HOME}. Its suggested home is ${orch}:")
+            println "     git clone ${zfinUtil.captureOutput(['git', '-C', zfinUtil.HOME.absolutePath, 'remote', 'get-url', 'origin']) ?: '<orchestrator repo URL>'} ${orch}"
+            println "     ${orch}/z shell-init >> ~/.bashrc"
         }
 
         if (doMounts) {

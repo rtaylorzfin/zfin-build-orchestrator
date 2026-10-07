@@ -21,7 +21,7 @@
 //                    default -- worth it on a host that makes many stacks.
 //
 // WHAT A SEED IS. A directory of per-volume tarballs plus a manifest, at
-// $ZFIN_ARCHIVE_DIR/seeds/<tag>/. `z feature new --seed <tag>` restores it into a new stack.
+// $ZFIN_SEEDS_DIR/<tag>/. `z feature new --seed <tag>` restores it into a new stack.
 // It is the same artifact shape `z feature freeze` writes, produced by the same
 // ZfinUtil.captureVolume and consumed by the same ZfinUtil.restoreVolumes -- one capture and
 // one restore implementation for the whole tool.

@@ -214,7 +214,7 @@ class NewFeature {
         def cwdBranch = captureOutput(['git', '-C', new File('.').absolutePath, 'rev-parse', '--abbrev-ref', 'HEAD'])
 
 // Warm-snapshot probe, by seed: `z seed create` leaves one tarball per volume under
-// $ZFIN_ARCHIVE_DIR/seeds/<tag>/. Defined up here (not just at the restore below) because
+// $ZFIN_SEEDS_DIR/<tag>/. Defined up here (not just at the restore below) because
 // the interactive plan has to know whether the app tier WILL be warm -- `gradle dirtydeploy`
 // only makes sense on top of a warm snapshot, and the boot prompt names the services it'll
 // actually start. Takes the tag as a parameter since the tag is still being decided.
@@ -424,6 +424,13 @@ class NewFeature {
         def host = zfinUtil.featureHost(slug)
         def wt = new File(WT_PARENT, slug)
         def wtPath = wt.absolutePath
+        // An existing directory is reused (the re-run path below) only when it is a linked
+        // worktree. Anything else -- worktrees/main, the main checkout, above all -- is not a
+        // feature, and reusing it would overwrite its docker/.env.
+        if (wt.exists() && !ZfinUtil.isLinkedWorktree(wt))
+            die("$wtPath exists and is not a feature worktree" +
+                (wt.canonicalFile == REPO.canonicalFile ? " (it is the main checkout)" : '') +
+                ".\n   Choose another ticket name.", 2)
 
 // Settle the branch BEFORE anything is created (loopback alias, worktree, .env, volumes),
 // so a wrong answer here costs nothing to retry. Skipped when the worktree already exists:
