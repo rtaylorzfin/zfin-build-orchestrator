@@ -23,6 +23,11 @@ class StackConfig {
     // Feature hostnames are <slug>.<domain>. The domain is a DEFAULT here; resolution
     // (docker/.env -> environment -> this) is ZfinUtil.featureDomain(). Each stack's host is
     // frozen into its own .env when it is made, so changing the default renames nothing.
+    // The versions of the ZFIN repo's dev-stack hooks this tooling works with: the
+    // `x-devstack-seams: N` its docker/docker-compose.yml declares (see ZfinUtil.checkSeams).
+    // Add a version here once the tooling handles it; drop one once no checkout still has it.
+    static final List<Integer> SEAMS_SUPPORTED = [1]
+
     static final String FEATURE_DOMAIN_DEFAULT = 'zfin.test'
 
     // The INSTANCE every per-feature stack generates properties as (written into the feature's

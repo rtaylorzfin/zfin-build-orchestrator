@@ -26,6 +26,12 @@ ZFIN checkout or feature worktree: it asks git which checkout you are standing i
 the base `docker-compose.yml` and `docker/.env` from there. From anywhere else, set
 `ZFIN_REPO=<checkout>`. Update the tooling with `git pull` in its checkout.
 
+**Version check.** The ZFIN repo's `docker/docker-compose.yml` declares which set of dev-stack
+hooks it provides, as `x-devstack-seams: N`, and `StackConfig.SEAMS_SUPPORTED` lists the
+versions this tooling works with. `z` refuses a checkout outside that list the first time it
+resolves one: a checkout with no marker predates the hooks (update it), and a newer one needs
+newer tooling (`git pull` here). `ZFIN_SKIP_SEAMS_CHECK=1` proceeds anyway, with a warning.
+
 ---
 
 ## The idea in one picture
