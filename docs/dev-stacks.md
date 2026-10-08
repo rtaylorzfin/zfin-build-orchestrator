@@ -20,7 +20,7 @@ inside one. Install it once per host:
 cd ~/zfin-dev
 git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git orchestrator
 eval "$(./orchestrator/z shell-init)"    # z on PATH + tab completion, for this shell
-z scaffold --root ~/zfin-dev             # the dev tree; says where to clone ZFIN
+z scaffold --root ~/zfin-dev             # the dev tree, and offers to clone ZFIN into worktrees/main
 ```
 
 `eval` sets up the current shell only, so run it in each new shell, or append the same output

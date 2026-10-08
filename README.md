@@ -13,7 +13,7 @@ Groovy only, run on the host. Needs `groovy`, Docker with Compose v2, and git.
 cd ~/zfin-dev
 git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git orchestrator
 eval "$(./orchestrator/z shell-init)"      # z on PATH + tab completion, for this shell
-z scaffold --root ~/zfin-dev
+z scaffold --root ~/zfin-dev             # the dev tree; offers to clone ZFIN into worktrees/main
 ```
 
 `eval` sets up the current shell only. To have `z` in every shell, append the same output to

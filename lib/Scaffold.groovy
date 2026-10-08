@@ -1,10 +1,14 @@
 // Scaffold -- `z scaffold`: create the recommended dev-tree layout under one parent.
 //
-//   z scaffold [--root DIR] [--no-mounts] [--dry-run]
+//   z scaffold [--root DIR] [--no-mounts] [--clone URL | --no-clone] [--dry-run]
 //
 //   --root DIR    where to build it. Defaults to the dev tree you are in; otherwise required.
 //   --no-mounts   skip mounts/ -- on a server those DOCKER_*_PATH directories usually point
 //                 at existing organisation-wide locations, not at this tree.
+//   --clone URL   clone the ZFIN repo into worktrees/main from URL, without asking.
+//   --no-clone    leave worktrees/main alone. With neither, a terminal is asked (Enter takes
+//                 the suggested URL: the origin of the ZFIN checkout you are in, else
+//                 ZFIN/zfin on GitHub); without a terminal, the clone command is printed.
 //   --dry-run     print what it would do.
 //
 // Everything this tooling reads or writes lives under one directory (docs/
@@ -22,11 +26,14 @@ class Scaffold {
         def die = zfinUtil.&die; def info = zfinUtil.&info
 
         def rootArg = null; def doMounts = true; def dryRun = false
+        def cloneUrl = null; def noClone = false
         for (int i = 0; i < args.size(); i++) {
             switch (args[i]) {
                 case '--root':       rootArg = args[++i]; break
                 case '--no-mounts':  doMounts = false; break
                 case '--dry-run':    dryRun = true; break
+                case '--clone':      cloneUrl = args[++i]; break
+                case '--no-clone':   noClone = true; break
                 default: die("z scaffold: unknown arg '${args[i]}'", 2)
             }
         }
@@ -102,12 +109,41 @@ class Scaffold {
         // Suggestions, never actions: which remote and credentials to clone with are yours.
         def main = new File(root, 'worktrees/main')
         def orch = new File(root, 'orchestrator')
-        if (!new File(main, '.git').isDirectory()) {
-            def url = zfinUtil.captureOutput(['git', 'remote', 'get-url', 'origin']) ?: '<ZFIN repo URL>'
+        // The main checkout: clone it on request. The suggested URL is the origin of the ZFIN
+        // checkout you are standing in (one with docker/docker-compose.yml, so not this tool's
+        // own checkout), else ZFIN's GitHub repo; which remote, and so which credentials, is
+        // yours to confirm.
+        if (main.exists() && !new File(main, '.git').isDirectory()) {
+            System.err.println("!! ${main} exists but is not a git checkout -- left alone")
+        } else if (!main.exists() && !noClone) {
+            def top = zfinUtil.captureOutput(['git', 'rev-parse', '--show-toplevel'])
+            def here = top && new File(top, 'docker/docker-compose.yml').isFile()
+                    ? zfinUtil.captureOutput(['git', '-C', top, 'remote', 'get-url', 'origin']) : null
+            def suggested = here ?: 'git@github.com:ZFIN/zfin.git'
+            def con = System.console()
+            def url = cloneUrl
             println ""
-            info("the main ZFIN checkout goes beside the features, at worktrees/main. Clone it there:")
-            println "     git clone ${url} ${main}"
-            println "   and give it a docker/.env (see docs/dev-tree-layout.md)."
+            if (!url && con && !dryRun) {
+                info("the main ZFIN checkout goes beside the features, at worktrees/main.")
+                def answer = con.readLine("   clone it from [${suggested}] (or 'n' to skip): ")?.trim()
+                url = answer?.toLowerCase() in ['n', 'no'] ? null : (answer ?: suggested)
+            }
+            if (url && dryRun) {
+                info("would clone ${url} into ${main}")
+            } else if (url) {
+                info("cloning ${url} into ${main}")
+                if (zfinUtil.runCommand(['git', 'clone', url, main.absolutePath], [check: false]) != 0)
+                    die("git clone failed -- nothing else was changed. Retry, or clone it yourself:\n" +
+                        "     git clone <url> ${main}")
+            } else {
+                info("the main ZFIN checkout goes beside the features, at worktrees/main. Clone it there:")
+                println "     git clone ${suggested} ${main}"
+            }
+        }
+        if (new File(main, '.git').isDirectory() && !new File(main, 'docker/.env').isFile()) {
+            println ""
+            info("worktrees/main needs a docker/.env: start from docker/environment_linux (or _mac), or an")
+            info("instance's own. See docs/dev-tree-layout.md for what to change.")
         }
         if (zfinUtil.HOME.canonicalFile != orch.canonicalFile) {
             println ""

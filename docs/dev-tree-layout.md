@@ -15,7 +15,9 @@ z scaffold --root ~/zfin-dev      # or just `z scaffold` from inside an existing
 ```
 
 It creates what is missing and never clobbers, so it is safe to re-run on a partially
-set-up tree. It writes the tree's `zfin-dev.env`; if you ran it from somewhere that is not
+set-up tree. It offers to clone the ZFIN repo into `worktrees/main` (`--clone URL` to skip the
+question, `--no-clone` to leave it), and says when that checkout still needs its `docker/.env`.
+It writes the tree's `zfin-dev.env`; if you ran it from somewhere that is not
 inside the new tree, it also records the tree in your user file, so `z` finds it from there.
 Run `z` with no tree to be found and, on a terminal, it offers to create one.
 
