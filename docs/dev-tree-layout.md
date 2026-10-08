@@ -136,21 +136,30 @@ and Linux.
 
 ## Offloading to NFS or an external disk
 
-Two ways, and they are not equivalent:
+`seeds/`, `archive/` and `cache/` can live on other storage, in either of two equivalent ways:
 
-**Override the setting** (preferred):
+**Override the setting:**
 
 ```bash
 z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
 z config set ZFIN_SEEDS_DIR=/Volumes/backup/zfin-seeds
 ```
 
-**Symlink** the directory. Works on Linux. Under Docker Desktop for macOS a bind source that
-symlinks outside the shared filesystem can fail — Docker resolves the link host-side and the
-target may not be in its file-sharing config. Test it before relying on it.
+**Or make the directory a symlink** to it: `ln -s /Volumes/backup/zfin-seeds seeds`. `z` and
+the containers it starts follow the link. If the link dangles -- the disk unplugged, the share
+not mounted on this host -- `z` stops and says so instead of failing somewhere less obvious, and
+`z scaffold` refuses to build around it. `z scaffold` shows each link with its target.
 
-Either way: an archive **at rest** on NFS or USB is fine; never run a database off one. I/O
-latency and fsync semantics will corrupt PGDATA.
+Either way, on macOS the target must be somewhere Docker Desktop shares (Settings → Resources →
+File sharing). It shares `/Users`, `/Volumes`, `/private`, `/tmp` and `/var/folders` by default;
+anywhere else, such as `/opt`, has to be added there.
+
+**`worktrees/` must be a real directory**, not a symlink: git records each worktree's real
+path, while the containers mount it at the path `z` records, and through a symlink the two
+differ. To keep worktrees elsewhere, set `ZFIN_WORKTREES_DIR` to the real path.
+
+An archive **at rest** on NFS or USB is fine; never run a database off one. I/O latency and
+fsync semantics will corrupt PGDATA.
 
 ---
 

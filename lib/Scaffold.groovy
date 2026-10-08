@@ -56,14 +56,25 @@ class Scaffold {
 
         info("dev tree root: $root${dryRun ? '   (--dry-run)' : ''}")
 
+        // seeds/, archive/ and cache/ may be symlinks to other storage; worktrees/ may not (see
+        // ZfinUtil.worktreesDir). A symlink is reported with its target, a dangling one refused.
+        def isLink = { File f -> java.nio.file.Files.isSymbolicLink(f.toPath()) }
+        // Checked before anything is created, so a refusal leaves the tree as it was.
+        def dangling = dirs.findAll { rel -> def d = new File(root, rel); isLink(d) && !d.exists() }
+        if (dangling)
+            die("symlink(s) to something that does not exist on this host -- is that disk or share mounted?\n" +
+                dangling.collect { "     $root/$it -> ${java.nio.file.Files.readSymbolicLink(new File(root, it).toPath())}" }.join('\n'))
+        if (isLink(new File(root, 'worktrees')))
+            die("$root/worktrees is a symlink. It must be a real directory: git records a worktree's\n" +
+                "   real path, and the containers mount it at the path z records.")
         def made = [], had = [], clashed = []
         dirs.each { rel ->
             def d = new File(root, rel)
-            if (d.isDirectory())      { had << rel }
-            else if (d.exists())      { clashed << rel }
-            else if (dryRun)          { made << rel }
-            else if (d.mkdirs())      { made << rel }
-            else                      { clashed << rel }
+            if (d.isDirectory())  { had << (isLink(d) ? "$rel -> ${d.canonicalPath}".toString() : rel) }
+            else if (d.exists())  { clashed << rel }
+            else if (dryRun)      { made << rel }
+            else if (d.mkdirs())  { made << rel }
+            else                  { clashed << rel }
         }
 
         if (clashed)

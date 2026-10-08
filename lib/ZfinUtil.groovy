@@ -567,7 +567,7 @@ class ZfinUtil {
         // no containers either, but no archive, so the two stay distinguishable.
         def anyContainers = captureOutput(['docker', 'ps', '-a', '--format', '{{.Label "com.docker.compose.project"}}'])
                 .readLines().findAll { it } as Set
-        def archiveRoot = new File(archiveDir())
+        def archiveRoot = new File(archiveDir(false))   // only asks whether a stack is frozen
         wts.collect { wt ->
             def envF   = new File(wt, 'docker/.env')
             def proj   = envField(envF, 'COMPOSE_PROJECT_NAME') ?: wt.name
@@ -732,7 +732,32 @@ class ZfinUtil {
 
     /** Per-directory overrides, each defaulting to a place under ZFIN_DEV_ROOT. Override one
      *  when it has to live elsewhere -- archives on NFS being the obvious case. */
-    String worktreesDir() { setting('ZFIN_WORKTREES_DIR') ?: "${devRoot()}/worktrees" }
+    String worktreesDir() {
+        def d = setting('ZFIN_WORKTREES_DIR') ?: "${devRoot()}/worktrees"
+        // Not a symlink: git records a worktree's REAL path in its pointers, while z records the
+        // path it was given, and every container mounts the worktree at that path -- through a
+        // symlink the two differ and git fails in the containers. Point the setting at the real
+        // directory instead.
+        if (java.nio.file.Files.isSymbolicLink(new File(d).toPath()))
+            die("$d is a symlink. worktrees/ must be a real directory (git records real paths);\n" +
+                "   set ZFIN_WORKTREES_DIR to its target instead:  z config set ZFIN_WORKTREES_DIR=${new File(d).canonicalPath}")
+        d
+    }
+
+    /** `path`, a directory this tooling keeps data in, after checking that a symlink there leads
+     *  somewhere. seeds/, archive/ and cache/ may be symlinks to other storage -- an external disk,
+     *  an NFS share -- and simply following one needs nothing from us. A DANGLING one, with the
+     *  disk unplugged or the share not mounted on this host, would otherwise surface as a failed
+     *  mkdir or a Docker error naming neither; say what it is instead. */
+    String checkedDir(String path, String what) {
+        def p = new File(path).toPath()
+        if (java.nio.file.Files.isSymbolicLink(p) && !java.nio.file.Files.exists(p)) {
+            def target = p.parent.resolve(java.nio.file.Files.readSymbolicLink(p)).normalize()
+            die("$what ($path) is a symlink to $target, which does not exist on this host.\n" +
+                "   Is that disk or share mounted?")
+        }
+        path
+    }
     /** The two absolute git paths the sidecar must bind, for a worktree OR a plain checkout:
      *  [common, dir]. For a worktree these differ (<repo>/.git and <repo>/.git/worktrees/<slug>);
      *  for a plain checkout both are <repo>/.git, so callers need no special case. */
@@ -744,8 +769,13 @@ class ZfinUtil {
         [one('--git-common-dir'), one('--git-dir')]
     }
 
-    String archiveDir()   { setting('ZFIN_ARCHIVE_DIR') ?: "${devRoot()}/archive" }
-    String cacheDir()     { setting('ZFIN_CACHE_DIR')   ?: "${devRoot()}/cache" }
+    /** `check` false is for a caller that only peeks -- is there an archive for this stack? --
+     *  and so should not fail when the archive's storage is away: a dangling link reads as empty. */
+    String archiveDir(boolean check = true) {
+        def d = setting('ZFIN_ARCHIVE_DIR') ?: "${devRoot()}/archive"
+        check ? checkedDir(d, 'the archive directory') : d
+    }
+    String cacheDir()     { checkedDir(setting('ZFIN_CACHE_DIR') ?: "${devRoot()}/cache", 'the cache directory') }
 
     /** A host path from docker/.env, with the leading ~ compose would expand. */
     File envPath(String key) {
@@ -759,7 +789,7 @@ class ZfinUtil {
      *  of loading, shared by every stack on the host) must survive that. */
     /** Captured stacks that new stacks restore from: active inputs, kept apart from archive/
      *  (parked state). Its own override, since seeds and archives may each want to live on NFS. */
-    File seedsDir() { new File(setting('ZFIN_SEEDS_DIR') ?: "${devRoot()}/seeds") }
+    File seedsDir() { new File(checkedDir(setting('ZFIN_SEEDS_DIR') ?: "${devRoot()}/seeds", 'the seeds directory')) }
     File seedDir(String tag) { new File(seedsDir(), tag) }
 
     /** Newest seed on this host, or null. Lets `--seed` be optional: the common case is "the

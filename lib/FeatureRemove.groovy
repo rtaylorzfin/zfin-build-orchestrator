@@ -46,7 +46,7 @@ class FeatureRemove {
         // on disk to say what it belonged to. Remove it with the rest, name it in the prompt so
         // it is never a surprise, and offer --keep-archive for the case where the archive is
         // the thing you actually want to keep.
-        def archive = new File(new File(zfinUtil.archiveDir()), slug)
+        def archive = new File(new File(zfinUtil.archiveDir(false)), slug)   // absent storage: nothing to remove
         def archiveBytes = archive.isDirectory() ?
                 ((archive.listFiles() ?: []).sum(0L) { it.isFile() ? it.length() : 0L } as long) : 0L
         def dropArchive = archive.isDirectory() && !keepArchive

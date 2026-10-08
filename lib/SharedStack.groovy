@@ -94,7 +94,7 @@ class SharedStack {
                 .readLines().findAll { it } as Set
         }
 
-        def archiveRoot = new File(archDir ?: zfinUtil.archiveDir())
+        def archiveRoot = new File(archDir ?: zfinUtil.archiveDir(sub in ['freeze', 'thaw']))
         def dest = new File(archiveRoot, project)
         def manifestFile = new File(dest, StackConfig.FREEZE_MANIFEST)
         def sharedVols = StackConfig.DATA_VOLS
