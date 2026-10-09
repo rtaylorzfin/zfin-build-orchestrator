@@ -272,21 +272,13 @@ class ZfinUtil {
     }
 
     // ---- host settings --------------------------------------------------------------------
-    // How this host runs the tooling (StackConfig.HOST_SETTINGS), from two files, most specific
-    // first:
-    //   TREE  <dev root>/zfin-dev.env -- one dev tree's settings. z finds it by walking up from
-    //         the working directory, the way git finds .git, and the directory holding it IS
-    //         ZFIN_DEV_ROOT. Several trees on one host each keep their own.
-    //   USER  ~/.config/zfin-build-orchestrator/env -- for running z outside any tree (a
-    //         checkout kept elsewhere): it may name ZFIN_DEV_ROOT, and holds this user's defaults.
-    // Precedence: the process environment, then the tree file, then the user file, then the
-    // default. Never the ZFIN checkout's docker/.env -- that describes the checkout's stack.
+    // How this host runs the tooling (StackConfig.HOST_SETTINGS), from <dev root>/zfin-dev.env:
+    // one dev tree's settings. z finds it by walking up from the working directory, the way git
+    // finds .git, and the directory holding it IS ZFIN_DEV_ROOT. Several trees on one host each
+    // keep their own. Nothing lives outside the tree: to run z from outside it (a checkout kept
+    // elsewhere), export ZFIN_DEV_ROOT. Precedence: the process environment, then the tree file,
+    // then the default. Never the ZFIN checkout's docker/.env -- that describes the checkout's stack.
     static final String TREE_CONFIG = 'zfin-dev.env'
-
-    File userConfigFile() {
-        def base = System.getenv('XDG_CONFIG_HOME') ?: "${System.getProperty('user.home')}/.config"
-        new File(base, 'zfin-build-orchestrator/env')
-    }
 
     private static Map<String, String> readEnvFile(File f) {
         def m = [:]
@@ -298,60 +290,54 @@ class ZfinUtil {
     }
     private static File expandHome(String p) { new File(p.replaceFirst('^~', System.getProperty('user.home'))).absoluteFile }
 
-    private Map<String, String> userConfigCache = null
-    Map<String, String> userConfig() { userConfigCache != null ? userConfigCache : (userConfigCache = readEnvFile(userConfigFile())) }
-
     private boolean treeResolved = false
     private File treeRootCache = null
-    private String treeVia = null     // 'env' | 'tree' | 'user': how the tree was found
+    private String treeVia = null     // 'env' | 'tree': how the tree was found
     /** The dev tree: $ZFIN_DEV_ROOT, else the nearest directory at or above the working
-     *  directory holding zfin-dev.env, else the user file's ZFIN_DEV_ROOT. Null when none. */
+     *  directory holding zfin-dev.env. Null when none. */
     File treeRoot() {
         if (treeResolved) return treeRootCache
         treeResolved = true
         if (System.getenv('ZFIN_DEV_ROOT')) { treeVia = 'env'; return (treeRootCache = expandHome(System.getenv('ZFIN_DEV_ROOT'))) }
         for (File d = new File('.').canonicalFile; d != null; d = d.parentFile)
             if (new File(d, TREE_CONFIG).isFile()) { treeVia = 'tree'; return (treeRootCache = d) }
-        def fromUser = userConfig()['ZFIN_DEV_ROOT']
-        if (fromUser) { treeVia = 'user'; treeRootCache = expandHome(fromUser) }
-        treeRootCache
+        null
     }
     File treeConfigFile() { treeRoot() ? new File(treeRoot(), TREE_CONFIG) : null }
 
     private Map<String, String> treeConfigCache = null
     Map<String, String> treeConfig() { treeConfigCache != null ? treeConfigCache : (treeConfigCache = readEnvFile(treeConfigFile())) }
 
-    /** A host setting: the environment, then the tree file, then the user file, then `dflt`.
+    /** A host setting: the environment, then the tree file, then `dflt`.
      *  ZFIN_DEV_ROOT is the tree's own location (treeRoot), never a line in the tree file. */
     String setting(String key, String dflt = null) {
         if (key == 'ZFIN_DEV_ROOT') return treeRoot()?.path ?: dflt
-        System.getenv(key) ?: (treeConfig()[key] ?: (userConfig()[key] ?: dflt))
+        System.getenv(key) ?: (treeConfig()[key] ?: dflt)
     }
 
-    /** Where a setting's value comes from, for `z config`: 'env', 'tree', 'user', or null. */
+    /** Where a setting's value comes from, for `z config`: 'env', 'tree', or null. */
     String settingSource(String key) {
         if (key == 'ZFIN_DEV_ROOT') { treeRoot(); return treeVia }
-        System.getenv(key) ? 'env' : (treeConfig()[key] ? 'tree' : (userConfig()[key] ? 'user' : null))
+        System.getenv(key) ? 'env' : (treeConfig()[key] ? 'tree' : null)
     }
 
-    /** Write (or, with a null value, remove) one setting -- in the tree file, or with `user` in
-     *  the user file -- keeping every other line, comments included, as it was. */
-    void saveSetting(String key, String value, boolean user = false) {
-        def f = user ? userConfigFile() : treeConfigFile()
+    /** Write (or, with a null value, remove) one setting in the tree file, keeping every other
+     *  line, comments included, as it was. */
+    void saveSetting(String key, String value) {
+        def f = treeConfigFile()
         if (!f) die("no dev tree here to hold $key -- run z inside one, create one with z scaffold, " +
-                    "or save it for this user: z config set --user $key=...")
+                    "or point at one: export ZFIN_DEV_ROOT=<dir>")
         def lines = f.isFile() ? f.readLines()
-                               : ["# zfin-build-orchestrator ${user ? 'settings for this user' : 'settings for this dev tree'} -- see `z config`".toString()]
+                               : ["# zfin-build-orchestrator settings for this dev tree -- see `z config`"]
         def kept = lines.findAll { !it.startsWith("${key}=") }
         if (value != null) kept << "${key}=${value}".toString()
         f.parentFile.mkdirs()
         f.text = kept.join('\n') + '\n'
-        userConfigCache = null; treeConfigCache = null
+        treeConfigCache = null
     }
 
-    /** Make `root` a dev tree: create it and its zfin-dev.env. When it is not at or above the
-     *  working directory, also record it as the user's ZFIN_DEV_ROOT, or z would not find it
-     *  from here. Returns true when it wrote the user file. */
+    /** Make `root` a dev tree: create it and its zfin-dev.env. Returns true when it is not at
+     *  or above the working directory -- z will not find it from here without ZFIN_DEV_ROOT. */
     boolean markTree(File root) {
         root.mkdirs()
         def marker = new File(root, TREE_CONFIG)
@@ -360,7 +346,6 @@ class ZfinUtil {
         def cwd = new File('.').canonicalFile
         def above = false
         for (File d = cwd; d != null; d = d.parentFile) if (d == root.canonicalFile) { above = true; break }
-        if (!above) saveSetting('ZFIN_DEV_ROOT', root.path, true)
         treeResolved = false; treeConfigCache = null
         !above
     }
@@ -715,8 +700,12 @@ class ZfinUtil {
         def suggestion = devRootSuggestion()
         def answer = con.readLine("Create one at [${suggestion}]: ")?.trim() ?: suggestion
         def dir = expandHome(answer)
-        def recorded = markTree(dir)
-        info("created ${new File(dir, TREE_CONFIG)}" + (recorded ? " (and recorded it in ${userConfigFile()}, since it is not above here)" : ''))
+        def elsewhere = markTree(dir)
+        info("created ${new File(dir, TREE_CONFIG)}")
+        if (elsewhere) {
+            info("it is not above here, so z finds it from here only with:  export ZFIN_DEV_ROOT=${dir}")
+            treeVia = 'env'; treeResolved = true; treeRootCache = dir    // for the rest of this run
+        }
         dir.path
     }
 
@@ -1017,8 +1006,8 @@ class ZfinUtil {
     // repo), and a certificate trusted for one stack would not cover the next. That script only
     // creates files that are missing, so a stack that already has these keeps them.
 
-    /** Where the host certificate lives: beside the config file, per user, per domain. */
-    File devCertDir() { new File(userConfigFile().parentFile, "dev-cert/${featureDomain()}") }
+    /** Where the host certificate lives: in the dev tree's config/certs/, per domain. */
+    File devCertDir() { new File(devRoot(), "config/certs/${featureDomain()}") }
 
     private String compileImageName() { StackConfig.compileImage(env('ZFIN_RELEASE'), env('DOCKER_ARCH', '')) }
 

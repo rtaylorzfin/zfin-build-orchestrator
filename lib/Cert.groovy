@@ -7,7 +7,7 @@
 // One self-signed certificate per host and feature domain (ZFIN_FEATURE_DOMAIN), covering
 // zfin.org, *.<domain>, <domain>, localhost and 127.0.0.1. `z feature new` installs it into
 // every stack it makes, so trusting it once in a browser or keychain covers every stack. It is
-// kept beside the config file (ZfinUtil.devCertDir), per user, never in a stack or the dev tree.
+// kept in the dev tree's config/certs/<domain>/ (ZfinUtil.devCertDir), never in a stack.
 class Cert {
     def run(List args, ZfinUtil zfinUtil) {
         if (zfinUtil.helpRequested(args, this)) return

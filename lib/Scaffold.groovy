@@ -51,12 +51,12 @@ class Scaffold {
             die("$root exists and is not a directory.")
 
         // The tree. Every directory here is named by a ZfinUtil accessor and read by something
-        // -- worktreesDir(), seedsDir(), archiveDir(), cacheDir(), the mount paths. Not the
+        // -- worktreesDir(), seedsDir(), archiveDir(), cacheDir(), devCertDir(), the mount paths. Not the
         // checkouts themselves: they are clones you make (see the suggestions at the end), and
         // the tooling finds them by asking git, not by looking in a fixed place.
         def dirs = ['worktrees', 'seeds',
                     'archive', 'archive/sessions',
-                    'cache']
+                    'cache', 'config', 'config/certs']
         if (doMounts) dirs += ['mounts', 'mounts/unloads', 'mounts/unloads/db', 'mounts/unloads/solr',
                                'mounts/research', 'mounts/blast', 'mounts/downloads',
                                'mounts/loadUp', 'mounts/gff3', 'mounts/hh_atlas']
@@ -101,9 +101,9 @@ class Scaffold {
         } else if (dryRun) {
             info("would create $marker")
         } else {
-            def recorded = zfinUtil.markTree(root)
+            def elsewhere = zfinUtil.markTree(root)
             info("created $marker -- this directory is now a dev tree")
-            if (recorded) info("recorded it as this user's ZFIN_DEV_ROOT (${zfinUtil.userConfigFile()}), since it is not above here")
+            if (elsewhere) info("z finds it from inside it; from elsewhere:  export ZFIN_DEV_ROOT=$root")
         }
 
         // Suggestions, never actions: which remote and credentials to clone with are yours.

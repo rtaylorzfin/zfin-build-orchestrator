@@ -163,9 +163,8 @@ no feature worktrees under /Users/ryan/zfin-dev/worktrees
 >> with other tooling rather than owned by this tree. See docs/dev-tree-layout.md.
 09:02:41 ryan@laptop:~/zfin-dev/worktrees/main$ z config
 tree file: /Users/ryan/zfin-dev/zfin-dev.env
-user file: /Users/ryan/.config/zfin-build-orchestrator/env  (not created yet)
   ZFIN_DEV_ROOT           /Users/ryan/zfin-dev  [tree]
-                            the dev tree: where zfin-dev.env is, found by walking up (or --user, from outside one)
+                            the dev tree: where zfin-dev.env is, found by walking up (or exported, from outside one)
   ZFIN_WORKTREES_DIR      -
                             feature worktrees (default: $ZFIN_DEV_ROOT/worktrees)
   ZFIN_ARCHIVE_DIR        -

@@ -48,7 +48,7 @@ class ProxyStack {
         if (other && other != NETWORK)
             zfinUtil.die("this host already names a proxy network (ZFIN_PROXY_NETWORK=$other), and stacks join that one.\n" +
                          "   Two proxies on one Docker socket would both claim every stack. To use this one instead:\n" +
-                         "     z config unset ZFIN_PROXY_NETWORK   (or --user), then z proxy up")
+                         "     z config unset ZFIN_PROXY_NETWORK, then z proxy up")
         zfinUtil.ensureDevCert()
         zfinUtil.runCommand(compose(zfinUtil) + ['up', '-d'])
         def https = zfinUtil.setting('ZFIN_PROXY_HTTPS_PORT', '443')

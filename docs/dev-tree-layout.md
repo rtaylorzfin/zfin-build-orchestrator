@@ -18,7 +18,8 @@ It creates what is missing and never clobbers, so it is safe to re-run on a part
 set-up tree. It offers to clone the ZFIN repo into `worktrees/main` (`--clone URL` to skip the
 question, `--no-clone` to leave it), and says when that checkout still needs its `docker/.env`.
 It writes the tree's `zfin-dev.env`; if you ran it from somewhere that is not
-inside the new tree, it also records the tree in your user file, so `z` finds it from there.
+inside the new tree, it says so: `z` finds the tree from inside it, or anywhere with
+`ZFIN_DEV_ROOT` exported.
 Run `z` with no tree to be found and, on a terminal, it offers to create one.
 
 ---
@@ -40,6 +41,8 @@ $ZFIN_DEV_ROOT/                  e.g. ~/zfin-dev  or  /opt/zfin-dev
 │   ├── <ticket>/                a frozen stack's volumes (z feature freeze)
 │   └── sessions/                sidecar session history (z feature session)
 ├── cache/                       z seed build's staging; safe to delete
+├── config/                      tooling configuration beyond zfin-dev.env
+│   └── certs/<domain>/          the development TLS certificate (z cert)
 └── mounts/                      optional: host paths bind-mounted into containers
     ├── unloads/{db,solr}        DOCKER_DB_UNLOADS_PATH / DOCKER_SOLR_UNLOADS_PATH
     ├── research/                DOCKER_RESEARCH_PATH
@@ -73,7 +76,7 @@ untracked, so switching branches leaves it alone. Git allows a branch to be chec
 place at a time, so a feature cannot use the branch `main/` currently has.
 
 `z` finds the main checkout by asking git, so this layout is a recommendation: a checkout kept
-elsewhere works too, with the tree named in your user file (see Configuration).
+elsewhere works too, with `ZFIN_DEV_ROOT` exported to name the tree (see Configuration).
 
 ---
 
@@ -84,21 +87,20 @@ These are **host settings**: how this machine runs the tooling, never kept in a 
 
 1. the process environment, so a one-off `ZFIN_SEED=<tag> z feature new …` changes nothing;
 2. the dev tree's `zfin-dev.env` -- this tree's settings;
-3. your user file, `~/.config/zfin-build-orchestrator/env` (under `$XDG_CONFIG_HOME` when that is
-   set) -- for running `z` outside any tree, such as from a checkout kept elsewhere. It may name
-   `ZFIN_DEV_ROOT`, and holds your own defaults;
-4. the default.
+3. the default.
+
+Nothing is kept outside the tree. To run `z` from outside it, such as from a checkout kept
+elsewhere, export `ZFIN_DEV_ROOT` (in your shell's rc file, say).
 
 Manage them with `z config`:
 
 ```bash
 z config                                   # every setting, its value and where it comes from
 z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive     # into this tree's zfin-dev.env
-z config set --user ZFIN_DEV_ROOT=~/zfin-dev                   # find that tree from anywhere
-z config unset ZFIN_ARCHIVE_DIR            # back to the next source
+z config unset ZFIN_ARCHIVE_DIR            # back to the default
 ```
 
-`ZFIN_DEV_ROOT` has no default: it is the tree you are in, or the one your user file names.
+`ZFIN_DEV_ROOT` has no default: it is the tree you are in, or the one exported in your shell.
 Everything else derives from it. Override individually only when something must live
 elsewhere:
 
@@ -168,8 +170,9 @@ fsync semantics will corrupt PGDATA.
 ## What is deliberately NOT here
 
 **Credentials.** The Claude sidecar token lives at `~/.zfin/claude-token`
-(`ZFIN_CLAUDE_TOKEN_FILE`), and the development TLS certificate's key beside your user file
-(`z cert`), both under `$HOME` rather than in this tree. On a shared host the dev
+(`ZFIN_CLAUDE_TOKEN_FILE`), under `$HOME` rather than in this tree. (The development TLS
+certificate, `z cert`, is the exception: it is in `config/certs/`, its key readable only by
+the developer who created it.) On a shared host the dev
 tree is group-writable so developers can collaborate on worktrees — a credential there would
 hand one person's subscription to everyone with an account.
 
