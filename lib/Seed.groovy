@@ -6,12 +6,29 @@
 //   z seed ls
 //   z seed rm <tag> [--force]
 //   z seed restore [<tag>] [--app] [--caches] [--force]
+//   z seed add-volumes <tag> [--from PROJECT] [--force] [VOLUME...]
+//   z seed verify [<tag>]
 //
 //   restore          Restore a seed into the stack that owns the working directory -- the
 //                    base checkout's own stack, typically, which `z feature new` never touches.
 //                    db+solr by default; --app adds the deployed app tier and Jenkins home,
 //                    --caches the build caches. Existing volumes are replaced only with --force,
 //                    and only once no container uses them (`z down` first).
+//
+//   add-volumes      Capture more volumes into an existing seed and record them in its
+//                    manifest -- typically the build caches, from a stack that has since
+//                    built: `z seed add-volumes <tag> --from <ticket>`. With no VOLUME, the
+//                    caches (gradle/maven/npm) that project has. Not pg_data or solr_var: they
+//                    are the seed, captured together from one load, and replacing one from
+//                    another stack gives a db and an index that disagree -- make a new seed.
+//                    The app tier (www_data, catalina_base, keystore, tls_certs) is all four
+//                    or none, because stacks restore it all-or-nothing. A volume the seed
+//                    already has is replaced only with --force. With no <tag>, on a
+//                    terminal, it asks for the seed, the stack and the volumes.
+//
+//   verify           Re-hash every tarball and compare it with the SHA-256 the manifest
+//                    recorded. Restores check only sizes (see ZfinUtil.seedProblems); this is
+//                    the full check, worth running after copying a seed somewhere new.
 //
 //   --from PROJECT   Compose project to capture from (default: $COMPOSE_PROJECT_NAME).
 //   --tag TAG        Seed name (default: today, YYYY-MM-DD).
@@ -56,7 +73,9 @@ class Seed {
             case 'ls': case 'list': list(rest, zfinUtil); break
             case 'rm': case 'remove': remove(rest, zfinUtil); break
             case 'restore': restore(rest, zfinUtil); break
-            default: die("z seed: unknown '${sub}' (new|create|build|restore|ls|rm). See z seed --help.", 2)
+            case 'add-volumes': addVolumes(rest, zfinUtil); break
+            case 'verify': verify(rest, zfinUtil); break
+            default: die("z seed: unknown '${sub}' (new|create|build|restore|add-volumes|verify|ls|rm). See z seed --help.", 2)
         }
     }
 
@@ -124,6 +143,12 @@ class Seed {
         if (caches) vols += StackConfig.CACHE_VOLS.findAll { has(it) }
         def absent = StackConfig.DATA_VOLS.findAll { !has(it) }
         if (absent) die("seed '$tag' has no ${absent.join(', ')} tarball")
+        def damaged = zfinUtil.seedProblems(seed, manifest, vols)
+        if (damaged) die("seed '$tag' does not match its manifest:\n   " + damaged.join('\n   ') +
+                         "\n   z seed verify $tag checks the rest; a damaged seed has to be copied again or rebuilt.")
+        def unchecked = zfinUtil.untrackedSeedVolumes(seed, manifest).findAll { it in vols }
+        if (unchecked) info("note: ${unchecked.join(', ')} not in the seed's manifest, so restored unchecked " +
+                            "(z seed add-volumes records them)")
 
         info("restore seed '$tag' into '$project': ${vols.join(', ')}")
         def existing = vols.findAll { zfinUtil.volumeExists("${project}_$it") }
@@ -154,6 +179,133 @@ class Seed {
         if (!app) info("app tier untouched (--app restores the seed's deployed app too)")
         info("start it:  z up db solr tomcat httpd")
         timer.report("seed restore '$tag' timing")
+    }
+
+    // ---- z seed add-volumes -------------------------------------------------------------
+    private void addVolumes(List args, ZfinUtil zfinUtil) {
+        def die = zfinUtil.&die; def info = zfinUtil.&info; def captureOutput = zfinUtil.&captureOutput
+        // Same default as create: the stack z resolved from the working directory.
+        def project = zfinUtil.childEnv['COMPOSE_PROJECT_NAME'] ?: zfinUtil.env('COMPOSE_PROJECT_NAME', '')
+        String tag = null
+        boolean force = false
+        List<String> vns = []
+        for (int i = 0; i < args.size(); i++) {
+            switch (args[i]) {
+                case '--from': case '--project': project = args[++i]; break
+                case '--force': case '-f': force = true; break
+                default:
+                    if (args[i].startsWith('-')) die("z seed add-volumes: unknown arg '${args[i]}'", 2)
+                    if (tag == null) tag = args[i] else vns << (args[i] as String)
+            }
+        }
+        def allowed = StackConfig.APP_VOLS + StackConfig.CACHE_VOLS + [StackConfig.JENKINS_VOL]
+        def present = { String vn -> zfinUtil.volumeExists("${project}_$vn") }
+
+        // No tag on a terminal: ask for each value, offering the one the flags would default to.
+        def con = System.console()
+        if (!tag && con) {
+            def seeds = (zfinUtil.seedsDir().listFiles() ?: [])
+                    .findAll { it.isDirectory() && zfinUtil.readSeedManifest(it) }*.name.sort()
+            if (!seeds) die("no seeds on this host -- z seed create, or z seed build")
+            def newest = zfinUtil.newestSeed()
+            println "seeds: ${seeds.join('  ')}"
+            tag = con.readLine("  seed to add to [$newest]: ")?.trim() ?: newest
+
+            // Projects with at least one volume a seed can take, from the volume names.
+            def vols = captureOutput(['docker', 'volume', 'ls', '--format', '{{.Name}}']).readLines()
+            def sources = allowed.collectMany { vn -> vols.findAll { it.endsWith("_$vn") }*.minus("_$vn") }
+                                 .unique().sort()
+            if (sources) println "stacks with volumes to add: ${sources.join('  ')}"
+            project = con.readLine("  capture from [${project ?: 'none'}]: ")?.trim() ?: project
+
+            if (!vns && project) {
+                def has = allowed.findAll { present(it) }
+                def dflt = StackConfig.CACHE_VOLS.findAll { present(it) }
+                if (has) println "'$project' has: ${has.join('  ')}"
+                def v = con.readLine("  volumes [${dflt.join(' ') ?: 'none'}]: ")?.trim()
+                vns = v ? v.tokenize(/[\s,]+/) : dflt
+            }
+        }
+        if (!tag) die("usage: z seed add-volumes <tag> [--from PROJECT] [--force] [VOLUME...]", 2)
+        if (!project) die("z seed add-volumes: no stack here to capture from -- name one with --from PROJECT")
+        // The capture runs in the compile image, whose tag is the release.
+        if (!zfinUtil.env('ZFIN_RELEASE')) die("ZFIN_RELEASE must be set (from docker/.env or the environment)")
+        def seed = zfinUtil.seedDir(tag)
+        def manifest = zfinUtil.readSeedManifest(seed)
+        if (!manifest) die("no seed '$tag' at $seed (z seed ls lists them)")
+
+        if (!vns) {
+            vns = StackConfig.CACHE_VOLS.findAll { present(it) }
+            if (!vns) die("project '$project' has none of ${StackConfig.CACHE_VOLS.join(', ')} -- " +
+                          "has it built anything yet? (--from names another stack)")
+        }
+        vns = vns.unique()
+        def data = vns.findAll { it in StackConfig.DATA_VOLS }
+        if (data) die("${data.join(' and ')} cannot be added to a seed: pg_data and solr_var are the seed,\n" +
+                      "   captured together from one load. One from another stack would leave a db and an\n" +
+                      "   index that disagree. Make a new seed instead:  z seed create --from $project")
+        def unknown = vns.findAll { !(it in allowed) }
+        if (unknown) die("not a seed volume: ${unknown.join(', ')}\n   one of: ${allowed.join(' ')}", 2)
+        def app = vns.findAll { it in StackConfig.APP_VOLS }
+        if (app && app.size() < StackConfig.APP_VOLS.size())
+            die("the app tier goes in whole: ${StackConfig.APP_VOLS.join(' ')}.\n" +
+                "   Stacks restore it all-or-nothing, so part of one deploy beside part of another\n" +
+                "   is a stack that serves neither.")
+        def missing = vns.findAll { !present(it) }
+        if (missing) die("project '$project' has no ${missing.collect { "${project}_$it" }.join(', ')}")
+        def have = vns.findAll { zfinUtil.archiveFileFor(seed, it) }
+        if (have && !force) die("seed '$tag' already has ${have.join(', ')}. --force replaces them.")
+
+        // Not refused: a cache in use is still a usable cache. The app tier is another matter,
+        // since tomcat writes to it, so say so rather than let a torn capture pass unremarked.
+        def users = vns.collectMany { vn ->
+            captureOutput(['docker', 'ps', '--filter', "volume=${project}_$vn", '--format', '{{.Names}}'])
+                    .readLines().findAll { it }
+        }.unique()
+        if (users) info("note: running containers use these volumes (${users.join(', ')}); " +
+                        (app ? "stop tomcat and httpd first for a consistent app tier" : "fine for caches"))
+
+        info("add to seed '$tag' from '$project': ${vns.join(', ')}")
+        def timer = zfinUtil.stepTimer()
+        vns.each { vn ->
+            // Captured under a name restores ignore, then renamed into place, so a failed or
+            // interrupted capture leaves the seed as it was rather than with half a tarball.
+            def part = new File(seed, "${vn}.tgz.part")
+            part.delete()
+            zfinUtil.captureVolume("${project}_$vn", part)
+            zfinUtil.archiveFileFor(seed, vn)?.delete()
+            if (!part.renameTo(new File(seed, "${vn}.tgz"))) die("could not move $part into place")
+        }
+        timer.mark('capture volumes')
+        zfinUtil.addSeedManifestVolumes(seed, vns, project)
+        timer.mark('checksum + manifest')
+        info("seed '$tag' now has ${vns.join(', ')}; z feature new restores them from here on")
+        timer.report("seed add-volumes '$tag' timing")
+    }
+
+    // ---- z seed verify ------------------------------------------------------------------
+    private void verify(List args, ZfinUtil zfinUtil) {
+        def die = zfinUtil.&die; def info = zfinUtil.&info
+        def tag = args.find { !it.startsWith('-') } ?: zfinUtil.newestSeed()
+        if (!tag) die("no seeds on this host -- z seed create, or z seed build")
+        def seed = zfinUtil.seedDir(tag)
+        def manifest = zfinUtil.readSeedManifest(seed)
+        if (!manifest) die("no seed '$tag' at $seed (z seed ls lists them)")
+        def vols = ((manifest.volumes ?: []) as List)
+        info("verify seed '$tag': re-hashing ${vols.size()} tarball(s) in $seed")
+        def bad = []
+        vols.each { v ->
+            def t0 = System.currentTimeMillis()
+            def p = zfinUtil.seedProblems(seed, manifest, [v.name as String], true)
+            bad.addAll(p)
+            info(String.format("  %-16s %s  (%.1fs)", v.name, p ? '!! ' + p[0] : 'ok',
+                               (System.currentTimeMillis() - t0) / 1000.0))
+        }
+        def untracked = zfinUtil.untrackedSeedVolumes(seed, manifest)
+        if (untracked) info("not in the manifest, so not checked: ${untracked.join(', ')} " +
+                            "(z seed add-volumes $tag --from <project> --force records them)")
+        if (bad) die("seed '$tag' is damaged. Copy it again from where it came from, or rebuild it.")
+        info("seed '$tag' matches its manifest")
     }
 
     // ---- z seed rm ---------------------------------------------------------------------

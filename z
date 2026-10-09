@@ -11,7 +11,7 @@
 //
 //   stack ops (target from cwd):        run exec up down pull log restart status  -> StackOps
 //   feature ops:                       feature new|ls|rm|refresh|freeze|thaw|session
-//   seeds (host-wide, not per ticket): seed create|build|restore|ls|rm
+//   seeds (host-wide, not per ticket): seed create|build|restore|add-volumes|verify|ls|rm
 //   host-wide stacks (own project):    shared (db+solr)
 //   CI / bootstrap:                    build fresh-install scaffold
 //
@@ -90,12 +90,17 @@ Seeds (a loaded stack's volumes, captured once and restored into many):
   z seed build [--db F] [--solr D] [--tag T]
                                          build a seed from a dump: load + deploy in a
                                          throwaway stack, capture it, tear it down
+  z seed restore [<tag>] [--app]         restore a seed into THIS stack (e.g. the base checkout's)
+  z seed add-volumes <tag> [--from P] [VOL...]
+                                         add volumes (default: the build caches) to a seed
+  z seed verify [<tag>]                  re-hash a seed's tarballs against its manifest
+  z seed ls / z seed rm <tag>            list / delete seeds
+
+Host:
   z shell-init [bash|zsh]                shell lines to put `z` on PATH + enable completion
   z config [ls|get|set|unset|path]       this host's settings (worktree/archive dirs, proxy, ...)
   z cert [install [<ticket>]]            the host's dev TLS certificate: where it is, how to trust it
   z proxy up|down|status|attach          serve every feature stack at https://<slug>.<domain>
-  z seed restore [<tag>] [--app]         restore a seed into THIS stack (e.g. the base checkout's)
-  z seed ls / z seed rm <tag>            list / delete seeds
 
 Shared data stack (read-mostly features share ONE db+solr copy):
   z shared up|down|status [--tag T]     run/stop the shared db+solr (project zfin_shared);

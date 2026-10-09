@@ -392,6 +392,15 @@ class NewFeature {
                             "   That stack would refuse its own data. Re-capture the seed against this\n" +
                             "   release, or point ZFIN_RELEASE at the one the seed was taken from.")
                 }
+                // Sizes only, and only the tarballs this run restores; z seed verify re-hashes.
+                def restoring = StackConfig.DATA_VOLS + (doApp ? StackConfig.APP_VOLS + [StackConfig.JENKINS_VOL] : []) +
+                                (doCaches ? StackConfig.CACHE_VOLS : [])
+                def damaged = sm ? zfinUtil.seedProblems(seed, sm, restoring) : []
+                if (damaged) die("seed '$tag' does not match its manifest:\n   " + damaged.join('\n   ') +
+                                 "\n   z seed verify $tag checks the rest; a damaged seed has to be copied again or rebuilt.")
+                def unchecked = sm ? zfinUtil.untrackedSeedVolumes(seed, sm).findAll { it in restoring } : []
+                if (unchecked) info("note: ${unchecked.join(', ')} not in the seed's manifest, so restored unchecked " +
+                                    "(z seed add-volumes records them)")
             }
         }
 

@@ -20,13 +20,14 @@ _z_complete() {
         shared)                    COMPREPLY=( $(compgen -W "up down status freeze thaw --tag --rm-data --stop-sharers --compress --no-compress --to --from" -- "$cur") ) ;;
         seed)
             if (( COMP_CWORD == argstart )); then
-                COMPREPLY=( $(compgen -W "new create build restore ls rm" -- "$cur") )
+                COMPREPLY=( $(compgen -W "new create build restore add-volumes verify ls rm" -- "$cur") )
             else
                 case "${COMP_WORDS[argstart]}" in
                     new|create)  COMPREPLY=( $(compgen -W "--from --tag --no-app --caches" -- "$cur") ) ;;
                     build)       COMPREPLY=( $(compgen -W "--db --solr --tag --ref --db-platform --caches --build --pull --keep --tmux --resume --clean" -- "$cur") ) ;;
                     restore)     COMPREPLY=( $(compgen -W "--app --caches --force" -- "$cur") ) ;;
                     rm)          COMPREPLY=( $(compgen -W "--force" -- "$cur") ) ;;
+                    add-volumes) COMPREPLY=( $(compgen -W "--from --force gradle_cache maven_cache npm_cache jenkins_data" -- "$cur") ) ;;
                 esac
             fi ;;
         scaffold)                  COMPREPLY=( $(compgen -W "--root --no-mounts --dry-run" -- "$cur") ) ;;

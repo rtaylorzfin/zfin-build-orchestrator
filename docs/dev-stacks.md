@@ -369,6 +369,15 @@ any schema or Solr delta). It is a warm start, not the final state — re-captur
 every dependency into an empty `gradle_cache`/`maven_cache`. Capturing them makes the first deploy
 fast too, at the cost of a larger seed — so it is opt-in, and restored regardless of `--up`, since
 `compile` mounts them on demand rather than as part of the served stack.
+A seed made without them can take them later, from any stack that has since built:
+`z seed add-volumes <tag> --from <ticket>` captures that stack's caches into the seed and records
+them in its manifest (run it with no arguments to be asked for each value).
+
+**Integrity:** `seed.json` records each tarball's size and SHA-256. Every restore checks the
+sizes of the tarballs it is about to use and refuses on a mismatch, which catches a copy cut
+short. `z seed verify <tag>` re-hashes them all; run it after copying a seed to a new disk or
+share, since it reads every byte. A tarball the manifest does not list is restored with a note
+that it was not checked.
 
 ---
 

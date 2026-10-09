@@ -816,13 +816,6 @@ class ZfinUtil {
         md.digest().encodeHex().toString()
     }
 
-    /** Write <dir>/seed.json: what the seed is, what wrote it, and a checksum per tarball.
-     *
-     *  The checksums exist because a seed has none of an image's guarantees. Docker verifies
-     *  a layer digest on every use; a tarball on NFS can be truncated by a full disk and will
-     *  restore silently into a half-empty volume. `pg_major` is here for the same reason, from
-     *  the other direction: PGDATA written by one postgres major cannot be opened by another,
-     *  and catching that at restore beats discovering it when the server refuses to start. */
     /** The platform CONTAINERS run on -- linux/arm64 on a Mac, linux/amd64 on the VMs. Docker's
      *  server, not the host: on a Mac the host is darwin but postgres runs linux/arm64, and it is
      *  the latter that wrote the data directory. */
@@ -868,6 +861,13 @@ class ZfinUtil {
      *  `z seed create` captures an existing stack and knows none of them. */
     Map seedProvenance = [:]
 
+    /** Write <dir>/seed.json: what the seed is, what wrote it, and a checksum per tarball.
+     *
+     *  The checksums exist because a seed has none of an image's guarantees. Docker verifies
+     *  a layer digest on every use; a tarball on NFS can be truncated by a full disk or damaged
+     *  in a copy (seedProblems checks for both). `pg_major` is here for the same reason, from
+     *  the other direction: PGDATA written by one postgres major cannot be opened by another,
+     *  and catching that at restore beats discovering it when the server refuses to start. */
     Map writeSeedManifest(File dir, Map meta) {
         def vols = (meta.volumes ?: []).collect { String vn ->
             def f = archiveFileFor(dir, vn)
@@ -887,6 +887,60 @@ class ZfinUtil {
         def f = new File(dir, StackConfig.SEED_MANIFEST)
         if (!f.isFile()) return null
         try { return new groovy.json.JsonSlurper().parse(f) as Map } catch (ignored) { return null }
+    }
+
+    /** Record tarballs added to an existing seed (`z seed add-volumes`): replace or append their
+     *  entries in seed.json and keep the rest -- created, built_from, platform and pg_major
+     *  describe the data tier, which adding volumes does not touch. */
+    Map addSeedManifestVolumes(File dir, List<String> vns, String fromProject) {
+        def m = readSeedManifest(dir)
+        def added = new Date().format('yyyy-MM-dd HH:mm:ss')
+        def entries = ((m.volumes ?: []) as List).findAll { !(it.name in vns) }
+        vns.each { vn ->
+            def f = archiveFileFor(dir, vn)
+            entries << [name: vn, file: f.name, bytes: f.length(), sha256: sha256(f),
+                        source_project: fromProject, added: added]
+        }
+        m.volumes = entries
+        // Written beside and renamed over, so an interrupted write cannot leave a manifest
+        // that is half a JSON document.
+        def tmp = new File(dir, StackConfig.SEED_MANIFEST + '.part')
+        tmp.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(m))
+        java.nio.file.Files.move(tmp.toPath(), new File(dir, StackConfig.SEED_MANIFEST).toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        m
+    }
+
+    /** What is wrong with a seed's tarballs, measured against its manifest: one line per
+     *  tarball that is missing, or whose size or (with `full`) SHA-256 differs from what was
+     *  recorded. Empty when all is well. `vns` limits the check to the volumes about to be
+     *  restored; null checks every volume the manifest lists.
+     *
+     *  Every restore checks sizes, because that is free and catches the likeliest damage: a
+     *  copy cut short by a full disk or an interrupted move to a share. The hash has to read
+     *  every byte, which on a network share takes minutes, so it is left to `z seed verify`. */
+    List<String> seedProblems(File dir, Map manifest, List<String> vns = null, boolean full = false) {
+        def problems = []
+        ((manifest?.volumes ?: []) as List).findAll { vns == null || it.name in vns }.each { v ->
+            def f = v.file ? new File(dir, v.file as String) : null
+            if (!f?.isFile()) { problems << "${v.name}: ${v.file ?: 'its tarball'} is missing".toString(); return }
+            if (v.bytes != null && f.length() != (v.bytes as long)) {
+                problems << "${v.name}: ${f.name} is ${f.length()} bytes; the manifest recorded ${v.bytes}".toString()
+                return
+            }
+            if (full && v.sha256 && sha256(f) != v.sha256)
+                problems << "${v.name}: ${f.name} does not match its recorded SHA-256".toString()
+        }
+        problems
+    }
+
+    /** Volumes with a tarball in a seed directory that its manifest does not list. They
+     *  restore like any other, but nothing can check them. */
+    List<String> untrackedSeedVolumes(File dir, Map manifest) {
+        def listed = ((manifest?.volumes ?: []) as List)*.name
+        (dir.listFiles() ?: []).findAll { it.isFile() && it.name ==~ /.+\.(tar|tgz)/ }
+                .collect { it.name.replaceFirst(/\.(tar|tgz)$/, '') }
+                .findAll { !(it in listed) }.unique().sort()
     }
 
     /** Which of a seed's app-tier volumes are missing or too small to be a deployed app.
