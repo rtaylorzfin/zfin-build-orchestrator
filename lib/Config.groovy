@@ -17,7 +17,10 @@ class Config {
         def known = StackConfig.HOST_SETTINGS
         def requireKnown = { String k ->
             if (!(k in known.keySet()))
-                die("unknown setting '$k'. Known: ${known.keySet().join(', ')}", 2)
+                die("unknown setting '$k'. Known: ${known.keySet().join(', ')}" +
+                    // The usual miss: a stack setting, which belongs in the checkout's docker/.env.
+                    (k ==~ /(ZFIN_RELEASE|COMPOSE_.*|DOCKER_.*)/
+                        ? "\n   $k is a stack setting, kept in the checkout's docker/.env:  z env set $k=<value>" : ''), 2)
         }
         def rest = args
         def describe = { File f -> f ? "$f${f.isFile() ? '' : '  (not created yet)'}" : '(no dev tree here)' }

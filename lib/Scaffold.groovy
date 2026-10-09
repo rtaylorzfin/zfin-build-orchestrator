@@ -142,8 +142,8 @@ class Scaffold {
         }
         if (new File(main, '.git').isDirectory() && !new File(main, 'docker/.env').isFile()) {
             println ""
-            info("worktrees/main needs a docker/.env: start from docker/environment_linux (or _mac), or an")
-            info("instance's own. See docs/dev-tree-layout.md for what to change.")
+            info("worktrees/main needs a docker/.env. From inside it:  z env init")
+            info("(from docker/environment_mac|linux; missing paths point at mounts/). See z env --help.")
         }
         if (zfinUtil.HOME.canonicalFile != orch.canonicalFile) {
             println ""

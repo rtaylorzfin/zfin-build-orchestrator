@@ -166,7 +166,7 @@ class NewFeature {
         }
 
         def baseEnvFile = new File(DOCKER, '.env')
-        if (!baseEnvFile.exists()) die("$baseEnvFile not found (needed as the base env)")
+        if (!baseEnvFile.exists()) die(zfinUtil.noBaseEnv() + "\n   (each feature's .env starts as a copy of it)")
 
 // Seed selection: --seed > $ZFIN_SEED > newest seed on this host. Picks WHICH captured
 // snapshot to restore from (dated captures, full vs lean, a branch-specific one) -- a

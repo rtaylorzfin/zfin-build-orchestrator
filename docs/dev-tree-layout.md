@@ -17,6 +17,10 @@ z scaffold --root ~/zfin-dev      # or just `z scaffold` from inside an existing
 It creates what is missing and never clobbers, so it is safe to re-run on a partially
 set-up tree. It offers to clone the ZFIN repo into `worktrees/main` (`--clone URL` to skip the
 question, `--no-clone` to leave it), and says when that checkout still needs its `docker/.env`.
+Make that with `z env init` from inside the checkout: it copies `docker/environment_mac` (or
+`_linux`; `--from` picks), points any `DOCKER_*_PATH` that does not exist on this host at the
+tree's `mounts/`, and lists what is still worth a look. `--op` fills in the secrets from
+1Password (`op inject` of the `.op_tmpl`). `z env set KEY=value` changes one line later.
 It writes the tree's `zfin-dev.env`; if you ran it from somewhere that is not
 inside the new tree, it says so: `z` finds the tree from inside it, or anywhere with
 `ZFIN_DEV_ROOT` exported.

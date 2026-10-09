@@ -229,7 +229,7 @@ class Seed {
         if (!tag) die("usage: z seed add-volumes <tag> [--from PROJECT] [--force] [VOLUME...]", 2)
         if (!project) die("z seed add-volumes: no stack here to capture from -- name one with --from PROJECT")
         // The capture runs in the compile image, whose tag is the release.
-        if (!zfinUtil.env('ZFIN_RELEASE')) die("ZFIN_RELEASE must be set (from docker/.env or the environment)")
+        zfinUtil.requireRelease()
         def seed = zfinUtil.seedDir(tag)
         def manifest = zfinUtil.readSeedManifest(seed)
         if (!manifest) die("no seed '$tag' at $seed (z seed ls lists them)")
@@ -358,8 +358,7 @@ class Seed {
             }
         }
 
-        def release = zfinUtil.env('ZFIN_RELEASE')
-        if (!release) die("ZFIN_RELEASE must be set (from docker/.env or the environment)")
+        def release = zfinUtil.requireRelease()
 
         // Stock db image: the pg engine matching this data, used for the WAL-trim throwaway
         // postgres (which MUST be the db image). The tar capture below uses zfinUtil.tarImage()
@@ -379,10 +378,25 @@ class Seed {
             die("seed '$tag' already exists at $out\n" +
                 "   Pick another --tag, or remove it:  z seed rm $tag")
 
-        // Both named volumes must exist, or the capture would silently produce empties.
-        [pgVol, solrVol].each { v ->
-            if (runQuietly(['docker', 'volume', 'inspect', v]) != 0)
-                die("volume '$v' not found -- is project '$project' loaded? (try --from)")
+        // Both named volumes must exist, or the capture would silently produce empties. When
+        // they don't, say what WOULD work here: a stack that is loaded (--from), a seed this host
+        // already has, or -- the usual case on a new host -- building one from a dump.
+        def missingVols = [pgVol, solrVol].findAll { runQuietly(['docker', 'volume', 'inspect', it]) != 0 }
+        if (missingVols) {
+            def vols = captureOutput(['docker', 'volume', 'ls', '--format', '{{.Name}}']).readLines()
+            def loaded = vols.findAll { it.endsWith('_pg_data') }*.replaceFirst(/_pg_data$/, '')
+                             .findAll { "${it}_solr_var".toString() in vols && it != project }
+            def seeds = zfinUtil.seedsDir().listFiles()?.findAll { zfinUtil.readSeedManifest(it) }*.name?.sort() ?: []
+            def msg = ["project '$project' has no loaded db+solr here (missing: ${missingVols.join(', ')})." as String,
+                       "   z seed create copies a stack that is already loaded. Instead:"]
+            // Half-loaded: the db is there and the index is not (or the reverse) -- finish the load.
+            if (missingVols.size() == 1)
+                msg << "     ${('z build ' + (missingVols[0] == solrVol ? 'load-solr' : 'load-db')).padRight(32)}finish loading '$project' (its ${missingVols[0] == solrVol ? 'db is' : 'solr index is'} there), then re-run this".toString()
+            if (loaded) msg << "     z seed new --from <project>     loaded here: ${loaded.join(', ')}".toString()
+            if (seeds)  msg << "     z seed restore <tag>            restore an existing seed (${seeds.join(', ')}) into this stack".toString()
+            msg << "     z seed build                    load the db + solr dumps (DOCKER_*_UNLOADS_PATH) in a\n" +
+                   "                                     throwaway stack, deploy, and capture that as a seed"
+            die(msg.join('\n'))
         }
 
         def appVols = StackConfig.APP_VOLS

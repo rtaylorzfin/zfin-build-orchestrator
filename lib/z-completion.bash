@@ -5,7 +5,7 @@ _z_complete() {
     local cur sub argstart=2
     cur="${COMP_WORDS[COMP_CWORD]}"
     if (( COMP_CWORD == 1 )); then
-        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status build feature seed shared scaffold fresh-install shell-init config cert proxy help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status build feature seed shared scaffold fresh-install shell-init env config cert proxy help" -- "$cur") )
         return
     fi
     sub="${COMP_WORDS[1]}"
@@ -34,6 +34,12 @@ _z_complete() {
         shell-init)                COMPREPLY=( $(compgen -W "bash zsh" -- "$cur") ) ;;
         cert)                      COMPREPLY=( $(compgen -W "show install" -- "$cur") ) ;;
         proxy)                     COMPREPLY=( $(compgen -W "up down status attach --all" -- "$cur") ) ;;
+        env)
+            if (( COMP_CWORD == argstart )); then
+                COMPREPLY=( $(compgen -W "show init get set" -- "$cur") )
+            elif [[ "${COMP_WORDS[argstart]}" == init ]]; then
+                COMPREPLY=( $(compgen -W "--from --op --no-mounts --force --dry-run mac linux" -- "$cur") )
+            fi ;;
         config)
             if (( COMP_CWORD == argstart )); then
                 COMPREPLY=( $(compgen -W "ls get set unset path" -- "$cur") )

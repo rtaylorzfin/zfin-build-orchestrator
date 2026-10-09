@@ -29,7 +29,7 @@ class FreshInstall {
         def runCommand = zfinUtil.&runCommand
         def DOCKER = zfinUtil.DOCKER
         def envFile = new File(DOCKER, '.env')
-        if (!envFile.exists()) die("$envFile not found -- run from a ZFIN checkout")
+        if (!envFile.exists()) die(zfinUtil.noBaseEnv())
 
         def dryRun = (args as List).contains('--dry-run')
         ; (args as List).findAll { it.startsWith('-') && it != '--dry-run' }.each { die("unknown flag: $it", 2) }

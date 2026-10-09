@@ -265,7 +265,9 @@ class SeedBuild {
         def captureOutput = zfinUtil.&captureOutput; def runCommand = zfinUtil.&runCommand
         def expand = { String p -> new File(p.replaceFirst('^~', System.getProperty('user.home'))).absoluteFile }
 
-        if (!zfinUtil.env('ZFIN_RELEASE')) die("ZFIN_RELEASE must be set (from docker/.env or the environment)")
+        // The build stack's env starts as a copy of this, and the dump paths come from it.
+        if (!baseEnv.isFile()) die(zfinUtil.noBaseEnv())
+        zfinUtil.requireRelease()
         if (zfinUtil.readSeedManifest(zfinUtil.seedDir(tag)) || (zfinUtil.seedDir(tag).listFiles() ?: []).any { it.isFile() })
             die("seed '$tag' already exists at ${zfinUtil.seedDir(tag)}\n" +
                 "   Pick another --tag, or remove it:  z seed rm $tag")
@@ -277,6 +279,8 @@ class SeedBuild {
         File dump; boolean configuredDb
         if (!dbArg || dbArg == 'latest') {
             def root = zfinUtil.envPath('DOCKER_DB_UNLOADS_PATH')
+            if (!root) die("db dump: DOCKER_DB_UNLOADS_PATH is not set in ${baseEnv}.\n" +
+                           "   Set it:  z env set DOCKER_DB_UNLOADS_PATH=<dir of dated dump dirs>   or name one:  --db <path>")
             def pick = zfinUtil.newestDbDump(root)
             if (pick.error) die("db dump: ${pick.error}")
             dump = pick.file; configuredDb = true
@@ -292,9 +296,21 @@ class SeedBuild {
         File snap; boolean configuredSolr
         if (!solrArg || solrArg == 'latest') {
             def root = zfinUtil.envPath('DOCKER_SOLR_UNLOADS_PATH')
-            def snaps = root ? zfinUtil.solrSnapshots(root) : []
-            if (!snaps) die("solr: no snapshot.* dir under ${root ? new File(root, 'zfindb') : 'DOCKER_SOLR_UNLOADS_PATH (unset)'}.\n" +
-                            "   Name one:  --solr <path>/snapshot.<timestamp>")
+            if (!root) die("solr: DOCKER_SOLR_UNLOADS_PATH is not set in ${baseEnv}.\n" +
+                           "   Set it:  z env set DOCKER_SOLR_UNLOADS_PATH=<dir>   or name one:  --solr <path>/snapshot.<timestamp>")
+            def snaps = zfinUtil.solrSnapshots(root)
+            if (!snaps) {
+                // The usual miss: a snapshot copied into the unloads dir itself. gradle getsolr
+                // and loadsolr both use <unloads>/zfindb/, so that is where it has to be.
+                def stray = ((root.listFiles() ?: []) as List).findAll { it.isDirectory() && it.name.startsWith('snapshot.') }
+                                                             .sort { -it.lastModified() }
+                die("solr: no snapshot.* dir under ${new File(root, 'zfindb')}" +
+                    (stray ? ",\n   but ${root} itself holds ${stray*.name.join(', ')}. Snapshots belong one level down,\n" +
+                             "   where gradle getsolr puts them and loadsolr reads them:\n" +
+                             "     mkdir -p '${root}/zfindb' && mv '${stray[0]}' '${root}/zfindb/'\n" +
+                             "   or use it where it is:  --solr '${stray[0]}'"
+                           : ".\n   Fetch one (gradle getsolr), or name one:  --solr <path>/snapshot.<timestamp>"))
+            }
             snap = snaps[0]; configuredSolr = true
         } else {
             def d = expand(solrArg)

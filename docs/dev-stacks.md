@@ -35,7 +35,8 @@ Host settings (where worktrees and archives live, which address and proxy networ
 are kept in the dev tree's `zfin-dev.env` -- found by walking up from where you are, or named
 by an exported `ZFIN_DEV_ROOT` -- and managed with `z config`; see
 [dev-tree-layout.md](dev-tree-layout.md#configuration). A ZFIN checkout's `docker/.env` holds
-only what its stack is (`ZFIN_RELEASE`, the `DOCKER_*` paths and ports).
+only what its stack is (`ZFIN_RELEASE`, the `DOCKER_*` paths and ports), and is managed with
+`z env` (`z env init` creates it from `docker/environment_mac|linux`).
 
 **Version check.** The ZFIN repo's `docker/docker-compose.yml` declares its version as an
 interface this tooling depends on, `x-zfin-compose-version: N`, and

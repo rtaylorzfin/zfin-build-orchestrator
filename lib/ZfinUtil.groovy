@@ -202,6 +202,22 @@ class ZfinUtil {
     }
 
     void die(String m, int code = 1) { System.err.println("!! $m"); System.exit(code) }
+
+    /** The message for a checkout with no docker/.env yet, wherever z first needs one -- so
+     *  every such failure says how to make it rather than what is missing from it. */
+    String noBaseEnv() {
+        "no ${new File(DOCKER, '.env')} -- this checkout's stack settings (ZFIN_RELEASE,\n" +
+        "   COMPOSE_PROJECT_NAME, the DOCKER_*_PATH mounts) live there. Create it from a template:\n" +
+        "     z env init          (z env --help for the options)"
+    }
+
+    /** ZFIN_RELEASE, or die saying why it is missing: most often there is no docker/.env at all. */
+    String requireRelease() {
+        def r = env('ZFIN_RELEASE')
+        if (r) return r
+        if (!new File(DOCKER, '.env').isFile()) die(noBaseEnv())
+        die("ZFIN_RELEASE is not set in ${new File(DOCKER, '.env')} -- set it with  z env set ZFIN_RELEASE=main")
+    }
     void info(String m) { println(">> $m") }
 
     private ProcessBuilder newProcess(List cmd) {

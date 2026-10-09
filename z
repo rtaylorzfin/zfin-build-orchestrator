@@ -99,6 +99,8 @@ Seeds (a loaded stack's volumes, captured once and restored into many):
 Host:
   z shell-init [bash|zsh]                shell lines to put `z` on PATH + enable completion,
                                          and the shortcuts main, wt [<name>|<ticket#>], ztree
+  z env [show|init|get|set]              this checkout's docker/.env (ZFIN_RELEASE, project, mounts);
+                                         z env init makes it from docker/environment_mac|linux
   z config [ls|get|set|unset|path]       this host's settings (worktree/archive dirs, proxy, ...)
   z cert [install [<ticket>]]            the host's dev TLS certificate: where it is, how to trust it
   z proxy up|down|status|attach          serve every feature stack at https://<slug>.<domain>
@@ -139,6 +141,7 @@ switch (cmd) {
         if (!(rest && rest[0] == 'build')) zfinUtil.resolveStack(new File('.').canonicalFile)
         runCmd('Seed', rest); break
     case 'shell-init':    runCmd('ShellInit', rest); break
+    case 'env':           runCmd('Env', rest); break
     case 'config':        runCmd('Config', rest); break
     case 'cert':          runCmd('Cert', rest); break
     case 'proxy':         runCmd('ProxyStack', rest); break
