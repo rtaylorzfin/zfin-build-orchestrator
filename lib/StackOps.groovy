@@ -22,6 +22,15 @@ class StackOps {
                     "   directory a stack.")
         }
 
+        // The proxy network this stack's httpd joins, or null when it joins none. Read from the
+        // stack's own .env, where z feature new recorded it, and only when the overlay that
+        // does the joining is in the stack's compose files.
+        def stackProxyNet = { ->
+            if (!(zfinUtil.stackVar('COMPOSE_FILE') ?: '').contains('overlay-proxy-network')) return null
+            def envf = zfinUtil.stackVar('COMPOSE_ENV_FILES')
+            zfinUtil.envField(envf ? new File(envf) : null, 'ZFIN_PROXY_NETWORK') ?: null
+        }
+
         // run/exec: split docker flags (-u root, before OR after the service) from the service
         // name and the bash args. First bare word = service (default compile); first bash flag
         // (e.g. -c) ends parsing and it + the rest go to bash.
@@ -114,13 +123,17 @@ class StackOps {
                 // Idempotent: on the normal stop/start cycle the network + connect persist, so
                 // this just re-confirms them; it matters after a full `docker compose down`.
                 def proj = zfinUtil.stackVar('COMPOSE_PROJECT_NAME')
+                int upCode
                 if (zfinUtil.stackVar('COMPOSE_FILE')?.contains('shared-db.yml') && proj) {
                     zfinUtil.runCommand(['docker', 'compose', 'up', '--no-start'] + rest)
                     zfinUtil.connectSharedData(proj)
-                    compose(['start'] + rest)
+                    upCode = zfinUtil.runCommand(['docker', 'compose', 'start'] + rest, [check: false])
                 } else {
-                    compose(['up', '-d'] + rest)
+                    upCode = zfinUtil.runCommand(['docker', 'compose', 'up', '-d'] + rest, [check: false])
                 }
+                def gap = stackProxyNet() ? zfinUtil.proxyReachProblem(stackProxyNet()) : null
+                if (gap) System.err.println("!! $gap")
+                System.exit(upCode)
                 break
             // stop vs down, matching compose's own meaning of the words: `stop` halts the
             // containers and keeps everything (this is what `z down` used to do, misleadingly);
@@ -144,10 +157,13 @@ class StackOps {
                 def readEnv = { String key -> zfinUtil.envField(envf ? new File(envf) : null, key) }
                 def offset = readEnv('ZFIN_PORT_OFFSET')
                 // Branch: the checked-out branch of this stack's worktree (empty if ZFIN_STACK_DIR
-                // isn't a git worktree). The Jira issue is assumed to share the branch name
-                // (ZFIN's feature branches are ticket-keyed), linked at the standard browse URL.
+                // isn't a git worktree). The Jira key comes from the stack's name, which is the
+                // ticket for a feature, else from the branch; a branch is often the key plus a
+                // suffix (zfin-10510-v2), so only the key part is taken.
                 def dir = zfinUtil.stackVar('ZFIN_STACK_DIR')
                 def branch = dir ? zfinUtil.captureOutput(['git', '-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD']) : ''
+                def keyOf = { String s -> def m = s =~ /(?i)^([a-z]+-\d+)(?!\d)/; m ? m[0][1].toUpperCase() : null }
+                def ticket = keyOf(active) ?: (branch ? keyOf(branch) : null)
                 // PR "create" link: derive the GitHub owner/repo slug from origin (SSH or HTTPS
                 // form) and point at the open-a-PR page for this branch. Empty for non-GitHub origins.
                 def origin = dir ? zfinUtil.captureOutput(['git', '-C', dir, 'remote', 'get-url', 'origin']) : ''
@@ -163,9 +179,14 @@ class StackOps {
                 if (verbose && offset) println "  ports    : " + [['https', 'DOCKER_HTTPD_HTTPS_PORT'], ['db', 'DOCKER_DB_PORT'],
                                                          ['debug', 'DOCKER_TOMCATDEBUG_PORT'], ['jenkins', 'DOCKER_JENKINS_HTTP_PORT']]
                         .collect { n, k -> readEnv(k) ? "$n ${readEnv(k)}" : null }.findAll { it }.join('   ')
-                if (branch)  println "  jira     : https://zfin.atlassian.net/browse/$branch"
+                if (ticket)  println "  jira     : https://zfin.atlassian.net/browse/$ticket"
                 if (branch && ghSlug) println "  pr       : https://github.com/$ghSlug/pull/new/$branch"
                 if (zfinUtil.stackVar('ZFIN_SEED')) println "  seed     : ${zfinUtil.stackVar('ZFIN_SEED')}"
+                if (stackProxyNet()) {
+                    def onIt = zfinUtil.runningProxies().findAll { n, nets -> stackProxyNet() in nets }.keySet()
+                    println "  proxy    : " + (onIt ? "${onIt.join(', ')} on ${stackProxyNet()}"
+                                                    : "!! nothing on ${stackProxyNet()} -- z up says why")
+                }
                 if (verbose) println "  compose  : ${zfinUtil.stackVar('COMPOSE_FILE') ?: '<none>'}"
                 if (verbose) println "  env-file : ${envf ?: '<none>'}"
                 // A one-line answer before the table. `docker compose ps` is accurate and

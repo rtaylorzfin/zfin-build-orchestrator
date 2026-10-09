@@ -310,6 +310,10 @@ class NewFeature {
             die("ZFIN_PROXY_NETWORK=$proxyNet, but there is no such Docker network.\n" +
                 "   Start the proxy that owns it (z proxy up, for z's own), or unset ZFIN_PROXY_NETWORK to\n" +
                 "   reach stacks on their published ports only. Nothing was created.")
+        // Warned, not refused: the stack works on its published port either way, and the fix
+        // belongs to whoever runs the proxy.
+        def proxyGap = proxyNet ? zfinUtil.proxyReachProblem(proxyNet) : null
+        if (proxyGap) System.err.println("!! $proxyGap")
 
         if (doSharedDb) {
             // What must be true is that the shared db+solr are RUNNING -- not that a network

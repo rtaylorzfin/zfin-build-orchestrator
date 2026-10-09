@@ -1155,6 +1155,39 @@ chmod 644 "$C/zfin.org.crt" "$S/keystore"
     /** The external Docker network an outside nginx-proxy watches, or null to route nothing. */
     String proxyNetwork() { setting('ZFIN_PROXY_NETWORK', '') ?: (ProxyStack.running(this) ? ProxyStack.NETWORK : null) }
 
+    /** The running nginx-proxy containers on this host, by name, each with the networks it is
+     *  on. Recognised by image (`.../nginx-proxy`) or by the label acme-companion finds its
+     *  nginx by, so a proxy built from some other image is missed -- which is why callers only
+     *  warn. */
+    Map<String, List<String>> runningProxies() {
+        def rows = captureOutput(['docker', 'ps', '--format', '{{.Names}}\t{{.Image}}\t{{.Labels}}'])?.readLines() ?: []
+        rows.collect { it.split('\t', 3) as List }.findAll { r ->
+            r.size() >= 2 && (r[1] ==~ /(.*\/)?nginx-proxy(:.*)?/ ||
+                    (r.size() > 2 && (r[2].contains('com.github.nginx-proxy.nginx=') ||
+                                      r[2].contains('com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy='))))
+        }.collectEntries { r ->
+            [r[0], (captureOutput(['docker', 'inspect', r[0], '--format',
+                                   '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}']) ?: '').tokenize()]
+        }
+    }
+
+    /** Why no proxy will route a stack that joins `net`, or null when a running nginx-proxy is
+     *  on it. Joining a network the proxy is not on fails quietly: the name resolves and TLS
+     *  works, and every request is a 502 from the proxy. */
+    String proxyReachProblem(String net) {
+        def proxies = runningProxies()
+        if (!proxies)
+            return "no running nginx-proxy found, so nothing routes stacks on $net.\n" +
+                   "   (A proxy built from another image is not recognised; if yours is, ignore this.)"
+        if (proxies.any { name, nets -> net in nets }) return null
+        def first = proxies.keySet().first()
+        "the proxy is not on $net, which this stack joins, so it answers 502 Bad Gateway:\n" +
+        proxies.collect { name, nets -> "     $name is on ${nets.join(', ') ?: 'no network'}" }.join('\n') + "\n" +
+        "   Connect it:  docker network connect $net $first\n" +
+        "   then z restart httpd: nginx-proxy rereads its containers only when one starts or stops.\n" +
+        "   To keep it across a recreate, add $net to that proxy's compose networks."
+    }
+
     /** How a stack is reached, from its own .env:
      *  [direct: https://<bind>:<port>  (its published httpd port, when it has one),
      *   vhost : https://<host>          (when it advertises one to an outside proxy: a checkout's
