@@ -97,7 +97,8 @@ Seeds (a loaded stack's volumes, captured once and restored into many):
   z seed ls / z seed rm <tag>            list / delete seeds
 
 Host:
-  z shell-init [bash|zsh]                shell lines to put `z` on PATH + enable completion
+  z shell-init [bash|zsh]                shell lines to put `z` on PATH + enable completion,
+                                         and the shortcuts main, wt [<name>|<ticket#>], ztree
   z config [ls|get|set|unset|path]       this host's settings (worktree/archive dirs, proxy, ...)
   z cert [install [<ticket>]]            the host's dev TLS certificate: where it is, how to trust it
   z proxy up|down|status|attach          serve every feature stack at https://<slug>.<domain>

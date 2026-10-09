@@ -19,6 +19,10 @@ z scaffold --root ~/zfin-dev             # the dev tree; offers to clone ZFIN in
 `eval` sets up the current shell only. To have `z` in every shell, append the same output to
 your startup file instead: `./orchestrator/z shell-init >> ~/.bashrc`.
 
+It also defines shortcuts for getting around the tree: `main` goes to `worktrees/main`, `wt`
+to `worktrees/`, `wt <name>` to a worktree (Tab completes it; `wt 12345` means `zfin-12345`),
+and `ztree` to the tree itself. They use the tree you are in, else the one `shell-init` ran in.
+
 | | |
 |---|---|
 | `z` | the front door |

@@ -1,5 +1,5 @@
-// ShellInit -- `z shell-init [bash|zsh]`: print the shell lines that put `z` on PATH and turn
-// on tab completion.
+// ShellInit -- `z shell-init [bash|zsh]`: print the shell lines that put `z` on PATH, turn
+// on tab completion, and define the navigation shortcuts (main, wt, ztree: lib/z-nav.sh).
 //
 //   eval "$(<orchestrator>/z shell-init)"          # this shell only
 //   <orchestrator>/z shell-init >> ~/.bashrc       # every shell from now on
@@ -23,6 +23,11 @@ class ShellInit {
 
         def utils = zfinUtil.HOME.absolutePath
         def compl = new File(zfinUtil.LIB, 'z-completion.bash').absolutePath
+        def nav = new File(zfinUtil.LIB, 'z-nav.sh').absolutePath
+        // The tree shell-init ran in, if any: where the shortcuts go from outside every tree.
+        // Looked up without prompting -- treeRoot(), not devRoot().
+        def tree = zfinUtil.treeRoot()?.absolutePath
+        def initTree = tree ? "_ZFIN_INIT_TREE='${tree}'\n" : ''
 
         print """\
 # ZFIN dev-stack tooling. These lines are shell -- run them, or keep them:
@@ -42,6 +47,10 @@ case ":\$PATH:" in *":${utils}:"*) ;; *) export PATH="${utils}:\$PATH" ;; esac
 ${shell == 'zsh' ? '''autoload -U +X compinit && compinit
 autoload -U +X bashcompinit && bashcompinit
 ''' : ''}source "${compl}"
+
+# Shortcuts: main -> worktrees/main, wt [<name>|<ticket#>] -> worktrees/<name> (tab completes),
+# ztree -> the dev tree. They follow the tree you are in${tree ? ", else this one:" : "."}
+${initTree}source "${nav}"
 """
     }
 }
