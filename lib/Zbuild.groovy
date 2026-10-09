@@ -21,7 +21,7 @@
 //   load-db         up db; gradle loaddb && make && liquibasePreBuild && liquibasePostBuild
 //   load-solr       up solr; wait for the core; gradle getLatestSolrIndex
 //   deploy-jenkins  ant deploy-jobs && deploy-plugins; (re)start jenkins
-//   deploy          build WAR; ant deploy-catalina-base && deploy-no-tests-no-restart;
+//   deploy          build WAR; ant deploy-catalina-base && deploy-without-tests-and-tomcat-restart;
 //                   (re)start httpd/mailpit/tomcat; (--test ? gradle test non+smoke)
 //
 // Flags:  --build  build stock images in `configure` (default: pull from ghcr.io)
@@ -57,7 +57,7 @@ class Zbuild {
 
         // Run a sequence ONE COMMAND PER CONTAINER, announcing each. A phase used to hand the
         // whole chain to one shell -- `gradle make && ant deploy-catalina-base && ant
-        // deploy-no-tests-no-restart` -- so a failure anywhere reported the entire string and
+        // deploy-without-tests-and-tomcat-restart` -- so a failure anywhere reported the entire string and
         // left you to work out which link broke, from ant output that does not say. The extra
         // container per step costs a few seconds against phases that run for minutes, and it
         // buys a failure that names itself. Stops at the first failure, like `&&` did.
@@ -166,13 +166,12 @@ class Zbuild {
         PHASES['deploy'] = {
             info('deploy: build WAR, deploy catalina-base + app, (re)start app tier')
             compose('stop', 'httpd', 'tomcat')
-            // deploy-no-tests-no-restart, not deploy-without-tests: the latter depends on
-            // `restart`, which buildfiles/tomcat.xml now makes a hard failure because tomcat
-            // lifecycle moved to the host when docker.sock stopped being mounted into compile.
-            // The restart was always redundant here anyway -- the stop and up either side of
-            // this line are the host doing exactly that job.
+            // deploy-without-tests-and-tomcat-restart skips the restart, despite reading as if it
+            // does one: it is deploy-without-tests minus `restart`. The stop and up either side
+            // of this line restart the app tier from the host, so a restart from inside compile
+            // would only be redundant.
             zcSteps('deploy', ['gradle make', 'ant deploy-catalina-base',
-                               'ant deploy-no-tests-no-restart'])
+                               'ant deploy-without-tests-and-tomcat-restart'])
             compose('up', '-d', 'httpd', 'mailpit', 'tomcat')
             if (runTests) {
                 info('deploy: tests')

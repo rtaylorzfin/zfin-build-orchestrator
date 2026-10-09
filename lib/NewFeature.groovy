@@ -807,7 +807,7 @@ class NewFeature {
             dl << (cold ? "  # first-time build + deploy, once the data is loaded;"
                         : "  # first-time build + deploy. The seed carries DB/Solr, so SKIP the load steps;")
             dl << "  # the compile container's first run also provisions the TLS cert (the ZFIN repo's reference/build-and-docker.md §1,§5):"
-            dl << '  z run -c "ant do && gradle make && ant deploy-catalina-base && ant deploy-no-tests-no-restart"'
+            dl << '  z run -c "ant do && gradle make && ant deploy-catalina-base && ant deploy-without-tests-and-tomcat-restart"'
             dl << "  z up tomcat httpd                  # app tier -> $url"
             dl << "  # fast edit -> see loop thereafter:"
             dl << '  z run -c "gradle dirtydeploy"'

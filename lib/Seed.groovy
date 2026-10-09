@@ -390,7 +390,7 @@ class Seed {
                 System.err.println("   Stacks made from it come up with db+solr only: httpd cannot start until")
                 System.err.println("   \$TARGETROOT is populated, and fails with an Apache config error that does")
                 System.err.println("   not mention the cause. They need the full first build:")
-                System.err.println("     z run -c \"ant do && gradle make && ant deploy-catalina-base && ant deploy-no-tests-no-restart\"")
+                System.err.println("     z run -c \"ant do && gradle make && ant deploy-catalina-base && ant deploy-without-tests-and-tomcat-restart\"")
                 System.err.println("   To avoid that, capture from a stack that has been DEPLOYED -- an instance, or")
                 System.err.println("   a feature stack you have built -- rather than from a data-only project.")
             }

@@ -383,7 +383,7 @@ delete seed 'mactest' (6.5G) from /opt/zfin/source_roots/stacks/seeds/mactest? [
    Stacks made from it come up with db+solr only: httpd cannot start until
    $TARGETROOT is populated, and fails with an Apache config error that does
    not mention the cause. They need the full first build:
-     z run -c "ant do && gradle make && ant deploy-catalina-base && ant deploy-no-tests-no-restart"
+     z run -c "ant do && gradle make && ant deploy-catalina-base && ant deploy-without-tests-and-tomcat-restart"
    To avoid that, capture from a stack that has been DEPLOYED -- an instance, or
    a feature stack you have built -- rather than from a data-only project.
 ...
@@ -1292,7 +1292,7 @@ Deleted branch zfin-12345 (was 7d3e9a1c42).
 >> deploy [2/3]: ant deploy-catalina-base
 ...
 >> deploy [2/3] ok (18.2s)
->> deploy [3/3]: ant deploy-no-tests-no-restart
+>> deploy [3/3]: ant deploy-without-tests-and-tomcat-restart
 ...
 >> deploy [3/3] ok (47.9s)
 [+] up 3/3
