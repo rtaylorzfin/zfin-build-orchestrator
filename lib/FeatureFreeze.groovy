@@ -282,8 +282,8 @@ class FeatureFreeze {
             leftover.each { runQuietly(['docker', 'volume', 'rm', "${project}_${it}".toString()]) }
         }
 
-        info(String.format("frozen: %.1f GB archived in %.0fs%s -> %s",
-                bytes / 1073741824.0, secs,
+        info(String.format("frozen: %.1f GB archived in %s%s -> %s",
+                bytes / 1073741824.0, zfinUtil.dur(secs),
                 compress ? " (${zfinUtil.hasPigz() ? 'pigz' : 'gzip'} -1)"
                          : " (uncompressed; --compress to shrink it${zfinUtil.hasPigz() ? '' : ', though gzip here is single-threaded'})",
                 dest))
@@ -294,7 +294,7 @@ class FeatureFreeze {
             println "    per volume:"
             volSecs.sort { -it.value }.each { vn, vs ->
                 def mb = new File(dest, "${vn}.${ext}").length() / 1048576.0
-                println String.format("      %-16s %7.1fs  %8.0f MB  %6.0f MB/s", vn, vs, mb, vs > 0 ? mb / vs : 0)
+                println String.format("      %-16s %11s  %8.0f MB  %6.0f MB/s", vn, zfinUtil.dur(vs), mb, vs > 0 ? mb / vs : 0)
             }
         }
     }

@@ -184,8 +184,8 @@ class FeatureThaw {
         if (restored) {
             println "    per volume:"
             restored.sort { -it.secs }.each { r ->
-                println String.format("      %-16s %7.1fs  %8.0f MB  %6.0f MB/s",
-                        r.vn, r.secs, r.mb, r.secs > 0 ? r.mb / r.secs : 0)
+                println String.format("      %-16s %11s  %8.0f MB  %6.0f MB/s",
+                        r.vn, zfinUtil.dur(r.secs), r.mb, r.secs > 0 ? r.mb / r.secs : 0)
             }
         }
     }

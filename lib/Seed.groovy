@@ -298,8 +298,8 @@ class Seed {
             def t0 = System.currentTimeMillis()
             def p = zfinUtil.seedProblems(seed, manifest, [v.name as String], true)
             bad.addAll(p)
-            info(String.format("  %-16s %s  (%.1fs)", v.name, p ? '!! ' + p[0] : 'ok',
-                               (System.currentTimeMillis() - t0) / 1000.0))
+            info(String.format("  %-16s %s  (%s)", v.name, p ? '!! ' + p[0] : 'ok',
+                               zfinUtil.dur((System.currentTimeMillis() - t0) / 1000.0)))
         }
         def untracked = zfinUtil.untrackedSeedVolumes(seed, manifest)
         if (untracked) info("not in the manifest, so not checked: ${untracked.join(', ')} " +
@@ -568,7 +568,7 @@ class Seed {
             volSecs.sort { -it.value }.each { vn, vs ->
                 def f = zfinUtil.archiveFileFor(out, vn)
                 def mb = (f?.length() ?: 0L) / 1048576.0
-                println String.format("      %-16s %7.1fs  %8.0f MB  %6.0f MB/s", vn, vs, mb, vs > 0 ? mb / vs : 0)
+                println String.format("      %-16s %11s  %8.0f MB  %6.0f MB/s", vn, zfinUtil.dur(vs), mb, vs > 0 ? mb / vs : 0)
             }
         }
     }

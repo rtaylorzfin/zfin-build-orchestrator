@@ -673,7 +673,7 @@ class NewFeature {
         if (toRestore) {
             step('restore volumes')
             restore(toRestore)
-            info(String.format("restore total: %.1fs", (System.currentTimeMillis() - warmT0) / 1000.0))
+            info(String.format("restore total: %s", zfinUtil.dur((System.currentTimeMillis() - warmT0) / 1000.0)))
         }
 
         // Caches the seed did not carry start as empty volumes; see prepareCacheVolumes.
@@ -895,8 +895,8 @@ teardown:
             // that gap is the parallelism doing its job, not an accounting error.
             println "    per volume (concurrent):"
             volSecs.sort { -it.value.secs }.each { vn, v ->
-                println String.format("      %-16s %7.1fs  %8.0f MB  %6.0f MB/s",
-                        vn, v.secs, v.mb, v.secs > 0 ? v.mb / v.secs : 0)
+                println String.format("      %-16s %11s  %8.0f MB  %6.0f MB/s",
+                        vn, zfinUtil.dur(v.secs), v.mb, v.secs > 0 ? v.mb / v.secs : 0)
             }
         }
     }

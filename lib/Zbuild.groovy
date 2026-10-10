@@ -73,8 +73,8 @@ class Zbuild {
                     "${phase} failed at step ${i + 1} of ${cmds.size()}: ${c}\n" +
                     "   Earlier steps in this phase succeeded. Re-run just this one with:\n" +
                     "     z run -c \"${c}\"", code)
-                zfinUtil.info(String.format("${phase} [${i + 1}/${cmds.size()}] ok (%.1fs)",
-                                            (System.currentTimeMillis() - t0) / 1000.0))
+                zfinUtil.info(String.format("${phase} [${i + 1}/${cmds.size()}] ok (%s)",
+                                            zfinUtil.dur((System.currentTimeMillis() - t0) / 1000.0)))
             }
         }
 

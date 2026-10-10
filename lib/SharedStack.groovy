@@ -115,7 +115,7 @@ class SharedStack {
                     def res = zfinUtil.restoreVolumes(project, StackConfig.DATA_VOLS, seed)
                     def bad = res.findAll { !it.ok }
                     if (bad) die("seed restore failed: ${bad.collect { it.vn }.join(', ')}\n" + bad.collect { it.err }.join('\n'))
-                    res.each { r -> info(String.format("restored %s (%.0f MB) in %.1fs", r.vol, r.mb, r.secs)) }
+                    res.each { r -> info(String.format("restored %s (%.0f MB) in %s", r.vol, r.mb, zfinUtil.dur(r.secs))) }
                 }
                 // If sharers are already attached, `up` may RECREATE the data tier (it does
                 // whenever the service definition changed), and that kills every connection
@@ -220,7 +220,7 @@ class SharedStack {
 
                 info("down -v the shared stack (the archive is the copy now)")
                 runCommand(compose + ['down', '-v'], [check: false])
-                info(String.format("shared stack frozen: %.1f GB in %.0fs -> %s", bytes / 1073741824.0, secs, dest))
+                info(String.format("shared stack frozen: %.1f GB in %s -> %s", bytes / 1073741824.0, zfinUtil.dur(secs), dest))
                 if (attachedNow) info("its sharers must be thawed/restarted after `z shared thaw`: ${attachedNow.join(', ')}")
                 break
 

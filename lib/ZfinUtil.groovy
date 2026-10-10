@@ -388,6 +388,16 @@ class ZfinUtil {
         vals ? vals[-1] : ''
     }
 
+    /** A duration for people: `42.3s` under a minute, then `4m 05s`, then `1h 02m 05s`.
+     *  The timing reports run from seconds to hours, and "2843.6s" makes you do the sum. */
+    static String dur(def secs) {
+        double s = (secs ?: 0) as double
+        if (Math.round(s * 10) < 600) return String.format('%.1fs', s)   // 59.96 is 1m 00s, not 60.0s
+        long t = Math.round(s)
+        t < 3600 ? String.format('%dm %02ds', t.intdiv(60), t % 60)
+                 : String.format('%dh %02dm %02ds', t.intdiv(3600), (t % 3600).intdiv(60), t % 60)
+    }
+
     /** Step timer for the long-running commands. `mark(label)` closes the step that just ran;
      *  `report()` prints them with a total. Freeze and thaw are multi-minute operations whose
      *  cost is not evenly spread -- knowing whether the time went to the database, the index or
@@ -415,9 +425,9 @@ class ZfinUtil {
                 marks.each { m ->
                     // Share of total, so the dominant step is obvious without doing the sums.
                     def pct = total > 0 ? (m.secs / total * 100.0) : 0
-                    println String.format("    %-${w}s %7.1fs  %4.0f%%", m.label, m.secs, pct)
+                    println String.format("    %-${w}s %11s  %4.0f%%", m.label, dur(m.secs), pct)
                 }
-                println String.format("    %-${w}s %7.1fs", 'TOTAL', total)
+                println String.format("    %-${w}s %11s", 'TOTAL', dur(total))
             }
         ]
     }
@@ -484,8 +494,8 @@ class ZfinUtil {
         def announce = { Map r ->
             synchronized (lock) {
                 done++
-                info(String.format("  [%d/%d] %-14s %7.0f MB in %5.1fs%s",
-                        done, vns.size(), r.vn, r.mb, r.secs, r.ok ? '' : '   !! FAILED'))
+                info(String.format("  [%d/%d] %-14s %7.0f MB in %7s%s",
+                        done, vns.size(), r.vn, r.mb, dur(r.secs), r.ok ? '' : '   !! FAILED'))
             }
         }
         def results = new Object[vns.size()]
