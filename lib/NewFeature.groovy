@@ -45,7 +45,7 @@
 //                   really for -y / scripted runs.
 //   --seed TAG      Which seed to restore this stack's db/solr (and warm app tier) from.
 //                   Default: the newest on this host; override via $ZFIN_SEED. `z seed ls`
-//                   lists them, `z seed create` captures one. (--tag is the old spelling.)
+//                   lists them, `z seed new` makes one. (--tag is the old spelling.)
 //   --no-seed       Take a COLD stack instead: empty db and solr, which you load afterwards
 //                   with `z build load-db load-solr`. Interactively, answer the seed prompt
 //                   `none`. There is no other way to decline -- `--seed ''` is falsy and
@@ -58,14 +58,14 @@
 // ZFIN_PROXY_NETWORK is set, httpd also joins that network and advertises VIRTUAL_HOST=<host>, so an
 // outside nginx-proxy watching it routes https://<host>. The repo runs no proxy either way.
 //   --up            Bring up the restored data tier (db + solr) after provisioning.
-//                   If the seed carries the app tier (z seed create does, by default),
+//                   If the seed carries the app tier (z seed new does, by default),
 //                   ALSO populate the deploy volumes and start tomcat/httpd so the stack
 //                   comes up serving the source branch's deploy. Otherwise the app tier
 //                   stays down until the webapp is built+deployed (see the next: block).
 //   --no-app        Skip the warm app tier even if a snapshot exists (cold app tier:
 //                   build + deploy yourself). No effect without a snapshot.
 //   --no-caches     Skip restoring the gradle/maven build caches even if captured
-//                   (z seed create --caches). No effect without them.
+//                   (z seed new --caches). No effect without them.
 //   --shared-db     Share the `zfin_shared` stack's db+solr instead of seeding this
 //                   feature's own copy (needs `z shared up` first). READ-MOSTLY only:
 //                   writes/migrations/reindex are shared with every other --shared-db
@@ -175,7 +175,7 @@ class NewFeature {
         def tag = noSeed ? null : (tagArg ?: zfinUtil.setting('ZFIN_SEED') ?: zfinUtil.newestSeed())
 // A seed with no app tier restores db+solr and nothing else, and the stack then fails long
 // after provisioning "succeeds": tomcat cannot find server.xml, httpd cannot open
-// inc-redirect. `z seed create` warns about this when it writes such a seed, but a seed
+// inc-redirect. `z seed new` warns about this when it writes such a seed, but a seed
 // outlives that session -- so say it again HERE, where someone is about to use one, and
 // again in the next: block, because this warning scrolls away during a long provision.
         // A seed from another platform restores a PostgreSQL data directory this host cannot
@@ -213,7 +213,7 @@ class NewFeature {
         // the tooling running against them.
         def cwdBranch = captureOutput(['git', '-C', new File('.').absolutePath, 'rev-parse', '--abbrev-ref', 'HEAD'])
 
-// Warm-snapshot probe, by seed: `z seed create` leaves one tarball per volume under
+// Warm-snapshot probe, by seed: `z seed new` leaves one tarball per volume under
 // $ZFIN_SEEDS_DIR/<tag>/. Defined up here (not just at the restore below) because
 // the interactive plan has to know whether the app tier WILL be warm -- `gradle dirtydeploy`
 // only makes sense on top of a warm snapshot, and the boot prompt names the services it'll
@@ -370,7 +370,7 @@ class NewFeature {
             // unintended null means this host has no seeds and the run should stop before it
             // creates anything.
             if (!tag && !noSeed) die("no seed to restore from.\n" +
-                    "   Capture one from a loaded stack:  z seed create --from <project>\n" +
+                    "   Capture one from a loaded stack:  z seed new --from <project>\n" +
                     "   ...or take a cold stack:           z feature new <ticket> --no-seed\n" +
                     "   ...or share a db+solr copy:        z feature new <ticket> --shared-db")
             // Everything below inspects the seed, so it only applies when there is one.
@@ -379,7 +379,7 @@ class NewFeature {
                 StackConfig.DATA_VOLS.each { vn ->
                     if (!zfinUtil.archiveFileFor(seed, vn))
                         die("seed '$tag' has no $vn tarball ($seed).\n" +
-                            (have() ? "   seeds here: ${have().join(', ')}" : "   no seeds yet -- z seed create"))
+                            (have() ? "   seeds here: ${have().join(', ')}" : "   no seeds yet -- z seed new"))
                 }
                 // A seed carries DATA; the engine comes from this stack's db image. PGDATA written
                 // by one postgres major cannot be opened by another, and refusing here beats
@@ -408,7 +408,7 @@ class NewFeature {
             }
         }
 
-// Warm app tier: `z seed create` leaves the deployed-app volumes as tarballs in the seed
+// Warm app tier: `z seed new` leaves the deployed-app volumes as tarballs in the seed
 // directory. If all four are present (and not --no-app), we
 // extract them into this feature's fresh volumes so tomcat/httpd come up already
 // serving the source branch's deploy -- the feature then dirtydeploys just its delta.
@@ -424,7 +424,7 @@ class NewFeature {
         if (doApp && !warmApp && auxDir.isDirectory())
             info("note: $auxDir exists but is missing app tarballs -- app tier will NOT be warmed")
         info(warmApp ? "warm app tier: yes (from $auxDir)"
-                : "warm app tier: no" + (doApp ? " (z seed create captures it by default)" : " (--no-app)"))
+                : "warm app tier: no" + (doApp ? " (z seed new captures it by default)" : " (--no-app)"))
         if (warmCaches) info("warm build caches: yes (${cachesPresent.collect { it - '_cache' }.join(' + ')}, from $auxDir)")
 
         def slug = name.toLowerCase()          // Compose projects must be lowercase

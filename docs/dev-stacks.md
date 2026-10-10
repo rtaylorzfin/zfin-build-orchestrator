@@ -50,7 +50,7 @@ the hooks this tooling needs (update it), and a newer one needs newer tooling (`
 ## The idea in one picture
 
 ```
-  z seed create    ──captures──▶  $ZFIN_SEEDS_DIR/<tag>/
+  z seed new       ──captures──▶  $ZFIN_SEEDS_DIR/<tag>/
   (once per host, from            pg_data.tgz  solr_var.tgz   (loaded DB + Solr index)
    a DEPLOYED stack)              www_data.tgz catalina_base.tgz ...  (the app tier)
                                   seed.json     (checksums + the postgres major)
@@ -76,7 +76,7 @@ route the stack.
 
 ## What a stack costs, and why
 
-A stack's data is restored from a seed rather than seeded by Docker from an image. `z seed create`
+A stack's data is restored from a seed rather than seeded by Docker from an image. `z seed new`
 captures a loaded stack's volumes as compressed tarballs plus a manifest; `z feature new --seed`
 extracts them into the new stack's volumes, in parallel, before anything starts.
 
@@ -97,7 +97,7 @@ against **~170s** for Docker seeding a volume from an image, because tar streams
 copies file by file. The images had no offsetting advantage — layer sharing does not apply when
 `VOLUME` forces a full copy into every stack anyway.
 
-`z seed create` trims WAL before capturing (`pg_resetwal` after a clean shutdown), which on this
+`z seed new` trims WAL before capturing (`pg_resetwal` after a clean shutdown), which on this
 host took a snapshot from 32.6G to 19.7G. The reclaimed space was retained WAL: dead weight in a
 frozen snapshot, having overshot `max_wal_size` during the load.
 
@@ -125,8 +125,8 @@ tool's own files are found from where `z` lives, and the ZFIN checkout from wher
 | `lib/StackConfig.groovy` | ZFIN-specific policy: image names, volume contracts, service roles. |
 | `lib/FeatureList.groovy` | List feature stacks (`z feature ls`). |
 | `lib/FeatureRemove.groovy` | Tear a feature down: down -v + worktree/branch/hosts (`z feature rm`). |
-| `lib/SeedBuild.groovy` | Build a seed from a db dump and a solr snapshot: the full load and deploy in a throwaway stack, captured and torn down (`z seed build`). |
-| `lib/Seed.groovy` | Capture a loaded stack's volumes as a reusable seed, and list/remove them (`z seed create\|ls\|rm`); WAL trimmed on every capture. |
+| `lib/SeedBuild.groovy` | Build a seed from a db dump and a solr snapshot: the full load and deploy in a throwaway stack, captured and torn down (`z seed new`). |
+| `lib/Seed.groovy` | Capture a loaded stack's volumes as a reusable seed, and list/remove them (`z seed new --from\|ls\|rm`; `z seed new` without `--from` hands off to SeedBuild); WAL trimmed on every capture. |
 | `lib/Zbuild.groovy` | Non-interactive, phased build/deploy orchestrator — the CI engine (`z build`; what GoCD stages should call). |
 | `lib/FreshInstall.groovy` | Guided day-zero setup on a bare workstation (`z fresh-install`). |
 | `lib/z-completion.bash` | bash tab-completion for `z`; source it from `~/.bashrc`. |
@@ -250,7 +250,7 @@ per stack.
 
 ```bash
 # 0. once per host: capture a seed from a DEPLOYED stack (an instance, or a built feature)
-z seed create --from coral --tag dev           # WAL always trimmed; --app is ON by default
+z seed new --from coral --tag dev              # WAL always trimmed; --app is ON by default
                                                #   add --caches for warm gradle/maven/npm
 
 # the checkout's OWN stack (the base checkout, an instance) takes a seed too -- restore it
@@ -288,20 +288,20 @@ cd $ZFIN_DEV_ROOT/worktrees/zfin-1234
 #    tmux session, so nothing is left pointing at a worktree that no longer exists.
 ```
 
-### Building a seed from a dump (`z seed build`)
+### Building a seed from a dump (`z seed new`)
 
-`z seed create` captures a stack that is already loaded. `z seed build` makes one from
+`z seed new --from <project>` captures a stack that is already loaded. `z seed new` alone makes one from
 nothing but a dump:
 
 ```bash
-z seed build --db ~/dumps/2026.09.28.1/zfindb.bak --solr ~/dumps/snapshot.2026.09.28-03.00 --tmux
-z seed build                        # the dump and snapshot loaddb/getLatestSolrIndex would pick
-z seed build --tag 2026-09-28 --resume     # carry on after a failed phase
-z seed build --tag 2026-09-28 --clean      # or discard it
+z seed new --db ~/dumps/2026.09.28.1/zfindb.bak --solr ~/dumps/snapshot.2026.09.28-03.00 --tmux
+z seed new                          # the dump and snapshot loaddb/getLatestSolrIndex would pick
+z seed new --tag 2026-09-28 --resume       # carry on after a failed phase
+z seed new --tag 2026-09-28 --clean        # or discard it
 ```
 
 It runs `z build configure load-db load-solr deploy-jenkins deploy` in a Compose project of
-its own (`seedbuild-<tag>`), then `z seed create` against it, then `down -v`. The choices that
+its own (`seedbuild-<tag>`), then `z seed new --from` against it, then `down -v`. The choices that
 shape it:
 
 - **Its own project, invisible to the host.** Every published port is an ephemeral
@@ -359,7 +359,7 @@ used to carry db/solr stop being a special case.
 **A seed with no app tier still works, but costs you the first build.** Capturing from a
 data-only project (`zfin_shared`, say) yields empty `www_data`, and httpd then dies at startup
 with an Apache config error naming nothing useful — it includes
-`$TARGETROOT/server_apps/apache/inc-redirect` and cannot find it. `z seed create` warns when it
+`$TARGETROOT/server_apps/apache/inc-redirect` and cannot find it. `z seed new` warns when it
 sees this, and the fix is to capture from a stack that has been deployed.
 
 **Version skew:** the captured deploy is the source branch's code at capture time. A feature boots

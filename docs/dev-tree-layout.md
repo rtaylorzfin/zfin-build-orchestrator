@@ -44,7 +44,7 @@ $ZFIN_DEV_ROOT/                  e.g. ~/zfin-dev  or  /opt/zfin-dev
 ├── archive/                     parked state
 │   ├── <ticket>/                a frozen stack's volumes (z feature freeze)
 │   └── sessions/                sidecar session history (z feature session)
-├── cache/                       z seed build's staging; safe to delete
+├── cache/                       z seed new's staging; safe to delete
 ├── config/                      tooling configuration beyond zfin-dev.env
 │   └── certs/<domain>/          the development TLS certificate (z cert)
 └── mounts/                      optional: host paths bind-mounted into containers
@@ -111,7 +111,7 @@ elsewhere:
 | variable | defaults to | override when |
 |---|---|---|
 | `ZFIN_WORKTREES_DIR` | `$ZFIN_DEV_ROOT/worktrees` | rarely |
-| `ZFIN_CACHE_DIR` | `$ZFIN_DEV_ROOT/cache` | rarely (`z seed build` stages its inputs and worktree here) |
+| `ZFIN_CACHE_DIR` | `$ZFIN_DEV_ROOT/cache` | rarely (`z seed new` stages its inputs and worktree here) |
 | `ZFIN_SEEDS_DIR` | `$ZFIN_DEV_ROOT/seeds` | **seeds on NFS, or shared between trees** |
 | `ZFIN_ARCHIVE_DIR` | `$ZFIN_DEV_ROOT/archive` | **archives on NFS or an external disk** |
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env groovy
-// Seed -- capture a loaded stack's volumes as a reusable SEED ARCHIVE, and manage the seeds.
+// Seed -- make reusable SEED ARCHIVES of a loaded stack's volumes, and manage the seeds.
 //
-//   z seed new|create [--from PROJECT] [--tag TAG] [--no-app] [--caches]
-//   z seed build [--db DUMP] [--solr SNAPSHOT] [--tag TAG] ...   (see z seed build --help)
+//   z seed new [--db DUMP] [--solr SNAPSHOT] [--tag TAG] ...   build one from the dumps
+//                                                             (see z seed new --help)
+//   z seed new --from PROJECT [--tag TAG] [--no-app] [--caches]
+//                                                             copy a stack that is already loaded
 //   z seed ls
 //   z seed rm <tag> [--force]
 //   z seed restore [<tag>] [--app] [--caches] [--force]
@@ -30,7 +32,14 @@
 //                    recorded. Restores check only sizes (see ZfinUtil.seedProblems); this is
 //                    the full check, worth running after copying a seed somewhere new.
 //
-//   --from PROJECT   Compose project to capture from (default: $COMPOSE_PROJECT_NAME).
+//   new              One verb, like `z feature new`; where the data comes from picks the how.
+//                    Without --from: load the dumps in a throwaway stack, deploy, capture it
+//                    and tear it down (SeedBuild). With --from: capture that stack's volumes as
+//                    they are. `create` (= new --from, defaulting to the stack you stand in) and
+//                    `build` (= new) still work.
+//
+//   --from PROJECT   Compose project (or feature ticket) to copy. Named, never guessed from the
+//                    working directory: the stack you stand in is often not the loaded one.
 //   --tag TAG        Seed name (default: today, YYYY-MM-DD).
 //   --no-app         Skip the deploy-target volumes. They are small (~0.7G) and without them
 //                    every feature comes up cold, so they are captured by DEFAULT.
@@ -59,23 +68,32 @@
 // upload path (see "Data-sensitivity guardrail" in docs/dev-stacks.md).
 class Seed {
     def run(List args, ZfinUtil zfinUtil) {
-        // Before the help guard, so `z seed build --help` prints SeedBuild's own header.
-        if (args && args[0] == 'build') { new SeedBuild().run(args.drop(1), zfinUtil); return }
-        if (zfinUtil.helpRequested(args, this)) return
         def die = zfinUtil.&die
-
         def sub = args ? args[0] : ''
         def rest = args.drop(1)
+        // The old spellings: say the new one, then do what they always did.
+        if (sub in ['create', 'build'] && !rest.any { it in ['-h', '--help'] })
+            System.err.println(">> (z seed $sub is now z seed new${sub == 'create' ? ' --from <project>' : ''})")
+        // Before the help guard, so `z seed new --help` prints SeedBuild's own header.
+        if (sub == 'build' || (sub == 'new' && !rest.contains('--from'))) { new SeedBuild().run(rest, zfinUtil); return }
+        if (zfinUtil.helpRequested(args, this)) return
+
         switch (sub) {
-            // `new` and `create` both, because `z feature new` reads as the verb for this and
-            // guessing which noun takes which verb is not a thing anyone should have to do.
-            case 'create': case 'new': create(rest, zfinUtil); break
+            case 'new':
+                // --from copies a stack; the dump-side flags would be silently meaningless.
+                def buildOnly = rest.findAll { it in ['--db', '--solr', '--ref', '--db-platform', '--build', '--pull',
+                                                      '--keep', '--tmux', '--resume', '--clean'] }
+                if (buildOnly)
+                    die("z seed new --from copies a stack that is already loaded; ${buildOnly.join(', ')} " +
+                        "${buildOnly.size() == 1 ? 'is' : 'are'} for\n   building one from the dumps (z seed new without --from).", 2)
+                create(rest, zfinUtil); break
+            case 'create': create(rest, zfinUtil); break
             case 'ls': case 'list': list(rest, zfinUtil); break
             case 'rm': case 'remove': remove(rest, zfinUtil); break
             case 'restore': restore(rest, zfinUtil); break
             case 'add-volumes': addVolumes(rest, zfinUtil); break
             case 'verify': verify(rest, zfinUtil); break
-            default: die("z seed: unknown '${sub}' (new|create|build|restore|add-volumes|verify|ls|rm). See z seed --help.", 2)
+            default: die("z seed: unknown '${sub}' (new|restore|add-volumes|verify|ls|rm). See z seed --help.", 2)
         }
     }
 
@@ -117,7 +135,7 @@ class Seed {
             }
         }
         tag = tag ?: zfinUtil.newestSeed()
-        if (!tag) die("no seeds on this host -- z seed create, or z seed build")
+        if (!tag) die("no seeds on this host -- make one:  z seed new")
         def seed = zfinUtil.seedDir(tag)
         def manifest = zfinUtil.readSeedManifest(seed)
         if (!manifest) die("no seed '$tag' at $seed (z seed ls lists them)")
@@ -206,7 +224,7 @@ class Seed {
         if (!tag && con) {
             def seeds = (zfinUtil.seedsDir().listFiles() ?: [])
                     .findAll { it.isDirectory() && zfinUtil.readSeedManifest(it) }*.name.sort()
-            if (!seeds) die("no seeds on this host -- z seed create, or z seed build")
+            if (!seeds) die("no seeds on this host -- make one:  z seed new")
             def newest = zfinUtil.newestSeed()
             println "seeds: ${seeds.join('  ')}"
             tag = con.readLine("  seed to add to [$newest]: ")?.trim() ?: newest
@@ -243,7 +261,7 @@ class Seed {
         def data = vns.findAll { it in StackConfig.DATA_VOLS }
         if (data) die("${data.join(' and ')} cannot be added to a seed: pg_data and solr_var are the seed,\n" +
                       "   captured together from one load. One from another stack would leave a db and an\n" +
-                      "   index that disagree. Make a new seed instead:  z seed create --from $project")
+                      "   index that disagree. Make a new seed instead:  z seed new --from $project")
         def unknown = vns.findAll { !(it in allowed) }
         if (unknown) die("not a seed volume: ${unknown.join(', ')}\n   one of: ${allowed.join(' ')}", 2)
         def app = vns.findAll { it in StackConfig.APP_VOLS }
@@ -287,7 +305,7 @@ class Seed {
     private void verify(List args, ZfinUtil zfinUtil) {
         def die = zfinUtil.&die; def info = zfinUtil.&info
         def tag = args.find { !it.startsWith('-') } ?: zfinUtil.newestSeed()
-        if (!tag) die("no seeds on this host -- z seed create, or z seed build")
+        if (!tag) die("no seeds on this host -- make one:  z seed new")
         def seed = zfinUtil.seedDir(tag)
         def manifest = zfinUtil.readSeedManifest(seed)
         if (!manifest) die("no seed '$tag' at $seed (z seed ls lists them)")
@@ -329,7 +347,7 @@ class Seed {
         info(String.format("deleted seed '%s' (%.1fG)", tag, bytes / 1073741824.0))
     }
 
-    // ---- z seed create -----------------------------------------------------------------
+    // ---- z seed new --from (and the old z seed create) -------------------------------
     private void create(List args, ZfinUtil zfinUtil) {
         def die = zfinUtil.&die; def info = zfinUtil.&info; def runCommand = zfinUtil.&runCommand
         def runQuietly = zfinUtil.&runQuietly
@@ -348,13 +366,15 @@ class Seed {
 
         for (int i = 0; i < args.size(); i++) {
             switch (args[i]) {
-                case '--from': case '--project': project = args[++i]; break
+                case '--from': case '--project':
+                    if (i + 1 >= args.size()) die("--from needs the stack to copy: a project or ticket, e.g. --from zfin-1234", 2)
+                    project = args[++i].toLowerCase(); break   // a ticket is its project
                 case '--tag': tag = args[++i]; break
                 case '--app': app = true; break
                 case '--no-app': app = false; break
                 case '--caches': caches = true; break
                 case '--no-caches': caches = false; break
-                default: die("z seed create: unknown arg '${args[i]}'", 2)
+                default: die("z seed new --from: unknown arg '${args[i]}'", 2)
             }
         }
 
@@ -373,7 +393,7 @@ class Seed {
         def solrVol = "${project}_solr_var"
         def out = zfinUtil.seedDir(tag)
 
-        info("seed create: from=$project release=$release tag=$tag -> $out")
+        info("seed new: from=$project release=$release tag=$tag -> $out")
         if (out.isDirectory() && (out.listFiles() ?: []).any { it.isFile() })
             die("seed '$tag' already exists at $out\n" +
                 "   Pick another --tag, or remove it:  z seed rm $tag")
@@ -388,13 +408,13 @@ class Seed {
                              .findAll { "${it}_solr_var".toString() in vols && it != project }
             def seeds = zfinUtil.seedsDir().listFiles()?.findAll { zfinUtil.readSeedManifest(it) }*.name?.sort() ?: []
             def msg = ["project '$project' has no loaded db+solr here (missing: ${missingVols.join(', ')})." as String,
-                       "   z seed create copies a stack that is already loaded. Instead:"]
+                       "   z seed new --from copies a stack that is already loaded. Instead:"]
             // Half-loaded: the db is there and the index is not (or the reverse) -- finish the load.
             if (missingVols.size() == 1)
                 msg << "     ${('z build ' + (missingVols[0] == solrVol ? 'load-solr' : 'load-db')).padRight(32)}finish loading '$project' (its ${missingVols[0] == solrVol ? 'db is' : 'solr index is'} there), then re-run this".toString()
             if (loaded) msg << "     z seed new --from <project>     loaded here: ${loaded.join(', ')}".toString()
             if (seeds)  msg << "     z seed restore <tag>            restore an existing seed (${seeds.join(', ')}) into this stack".toString()
-            msg << "     z seed build                    load the db + solr dumps (DOCKER_*_UNLOADS_PATH) in a\n" +
+            msg << "     z seed new                      load the db + solr dumps (DOCKER_*_UNLOADS_PATH) in a\n" +
                    "                                     throwaway stack, deploy, and capture that as a seed"
             die(msg.join('\n'))
         }

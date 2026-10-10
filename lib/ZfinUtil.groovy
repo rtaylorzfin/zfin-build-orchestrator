@@ -434,7 +434,7 @@ class ZfinUtil {
 
     /** Tar a named volume to `out` (gzip). Root + --entrypoint tar so it can read both
      *  postgres-owned and solr-owned contents and bypass the image's own entrypoint.
-     *  Shared by `z feature freeze` and `z seed create`, so freeze archives and seeds are
+     *  Shared by `z feature freeze` and `z seed new`, so freeze archives and seeds are
      *  produced by the same code. */
     /** Is pigz (parallel gzip) present in the tar image? Cached: the probe costs a container
      *  start, and freeze asks once per volume. Null until first asked. */
@@ -468,7 +468,7 @@ class ZfinUtil {
     }
 
     /** The archive file for a volume in `dir`, whichever form it was written in: uncompressed
-     *  `<vn>.tar` or gzipped `<vn>.tgz` (freeze and seed create both write either, depending
+     *  `<vn>.tar` or gzipped `<vn>.tgz` (freeze and seed new both write either, depending
      *  on --compress and whether pigz is available). Returns null when neither exists. */
     File archiveFileFor(File dir, String vn) {
         [new File(dir, "${vn}.tar"), new File(dir, "${vn}.tgz")].find { it.isFile() }
@@ -868,12 +868,12 @@ class ZfinUtil {
 
     String seedPlatformProblem(String tag) {
         platformProblem("seed '$tag'", readSeedManifest(seedDir(tag))?.platform,
-                        "Make a seed on this host instead:  z seed create")
+                        "Make a seed on this host instead:  z seed new")
     }
 
     /** What a seed was built from, recorded in its manifest as `built_from`. Set by
-     *  `z seed build`, which knows the dump, the snapshot and the commit; a plain
-     *  `z seed create` captures an existing stack and knows none of them. */
+     *  `z seed new` from the dumps, which knows the dump, the snapshot and the commit;
+     *  `z seed new --from` captures an existing stack and knows none of them. */
     Map seedProvenance = [:]
 
     /** Write <dir>/seed.json: what the seed is, what wrote it, and a checksum per tarball.

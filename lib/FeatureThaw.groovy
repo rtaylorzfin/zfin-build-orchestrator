@@ -141,7 +141,7 @@ class FeatureThaw {
             } else if (!absent) {
                 info("build caches already present -- nothing to re-warm")
             } else if (auxDir?.isDirectory()) {
-                info("seed '$tag' carries no build caches (z seed create --caches) -- first gradle run will re-resolve dependencies")
+                info("seed '$tag' carries no build caches (z seed new --caches) -- first gradle run will re-resolve dependencies")
             } else {
                 info("no warm-cache snapshot for tag '${tag ?: '?'}' -- first gradle run will re-resolve dependencies")
             }

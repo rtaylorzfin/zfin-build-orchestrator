@@ -10,7 +10,7 @@
 //   3. check the init inputs exist (db dump, solr dump; optional bowtie/blast/loadup)
 //   4. ask for an optional first ticket (e.g. ZFIN-789)
 //   5. drive the existing tools to stand up a loaded base stack, and optionally a feature:
-//        z build all -> [z seed create + z feature new]
+//        z build all -> [z seed new --from + z feature new]
 //
 // --dry-run runs the checks and prints the plan (using defaults, no prompts) without
 // executing the heavy build/load steps.
@@ -140,7 +140,7 @@ class FreshInstall {
         if (firstTicket) {
             // A feature stack needs a seed to restore from -- captured from the base stack `build all` just deployed, so
             // the feature comes up already serving. -y: this run is unattended from here on.
-            plan << [zExe, 'seed', 'create', '--from', project, '--tag', tag]
+            plan << [zExe, 'seed', 'new', '--from', project, '--tag', tag]
             plan << [zExe, 'feature', 'new', firstTicket, '-y', '--seed', tag, '--up']
         }
 

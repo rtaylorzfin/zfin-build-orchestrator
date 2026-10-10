@@ -106,7 +106,7 @@ class SharedStack {
                 // keeps it -- restoring over a live shared tier would discard everyone's work.
                 def seeded = zfinUtil.runQuietly(['docker', 'volume', 'inspect', "${project}_pg_data".toString()]) == 0
                 if (!seeded) {
-                    if (!tag) die("no seed found -- capture one (z seed create) or pass --seed <tag>")
+                    if (!tag) die("no seed found -- make one (z seed new) or pass --seed <tag>")
                     def seed = zfinUtil.seedDir(tag)
                     StackConfig.DATA_VOLS.each { vn ->
                         if (!zfinUtil.archiveFileFor(seed, vn)) die("seed '$tag' has no $vn tarball ($seed)")

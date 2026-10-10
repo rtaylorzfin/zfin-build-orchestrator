@@ -11,7 +11,7 @@
 //
 //   stack ops (target from cwd):        run exec up down pull log restart status  -> StackOps
 //   feature ops:                       feature new|ls|rm|refresh|freeze|thaw|session
-//   seeds (host-wide, not per ticket): seed create|build|restore|add-volumes|verify|ls|rm
+//   seeds (host-wide, not per ticket): seed new|restore|add-volumes|verify|ls|rm
 //   host-wide stacks (own project):    shared (db+solr)
 //   CI / bootstrap:                    build fresh-install scaffold
 //
@@ -86,10 +86,10 @@ CI / bootstrap (no activation needed):
   z fresh-install [--dry-run]           guided day-zero setup on a bare workstation
 
 Seeds (a loaded stack's volumes, captured once and restored into many):
-  z seed new|create [--from P] [--tag T] capture db+solr (+ app tier) from a loaded stack
-  z seed build [--db F] [--solr D] [--tag T]
-                                         build a seed from a dump: load + deploy in a
+  z seed new [--db F] [--solr D] [--tag T]
+                                         make a seed from the dumps: load + deploy in a
                                          throwaway stack, capture it, tear it down
+  z seed new --from <project> [--tag T]  copy a stack that is already loaded (db+solr+app tier)
   z seed restore [<tag>] [--app]         restore a seed into THIS stack (e.g. the base checkout's)
   z seed add-volumes <tag> [--from P] [VOL...]
                                          add volumes (default: the build caches) to a seed
@@ -132,13 +132,11 @@ switch (cmd) {
     case 'fresh-install': runCmd('FreshInstall', rest); break
     case 'scaffold':      runCmd('Scaffold', rest); break
     case 'shared':        runCmd('SharedStack', rest); break
-    // `z seed create` captures A STACK, so it resolves one from the working directory like the
-    // stack ops do -- standing in a feature worktree and getting the BASE stack captured (or a
-    // "volume 'zfin_org_pg_data' not found" for a stack that is not even up) is a trap. --from
-    // still overrides, and ls/rm ignore the target entirely.
-    // ...except `seed build`, which makes its own stack and must not announce the cwd's.
+    // restore and add-volumes act on the stack you stand in, so they resolve it like the stack
+    // ops do (as does the old `seed create`, whose default that was). Nothing else does: `seed
+    // new` builds its own stack or copies the one --from names, and ls/rm/verify need none.
     case 'seed':
-        if (!(rest && rest[0] == 'build')) zfinUtil.resolveStack(new File('.').canonicalFile)
+        if (rest && rest[0] in ['restore', 'add-volumes', 'create']) zfinUtil.resolveStack(new File('.').canonicalFile)
         runCmd('Seed', rest); break
     case 'shell-init':    runCmd('ShellInit', rest); break
     case 'env':           runCmd('Env', rest); break

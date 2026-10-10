@@ -76,7 +76,7 @@ class StackConfig {
     // They are VALUES on purpose. Anything a value can express belongs in the stack's own .env
     // and is read by docker-compose.yml; the overlay keeps only what a value cannot say.
 
-    // What makes a seed's APP TIER usable. Checked on BOTH sides -- `z seed create` warns that
+    // What makes a seed's APP TIER usable. Checked on BOTH sides -- `z seed new` warns that
     // the seed it just wrote is thin, and `z feature new --seed` warns before restoring one --
     // because a seed outlives the session that made it and the create-time warning scrolls away
     // with it. The failure it prevents points nowhere near the cause: httpd includes
@@ -111,7 +111,7 @@ class StackConfig {
     // docker-compose.yml, which is what the app tier's `condition: service_healthy` waits on;
     // YAML cannot import this file, so the two are kept in step by hand and both carry a note.
     // This argv form exists because it covers the case compose cannot: a postgres started
-    // OUTSIDE compose (`z seed create`'s throwaway container for the WAL trim) has no compose
+    // OUTSIDE compose (`z seed new`'s throwaway container for the WAL trim) has no compose
     // healthcheck to read.
     static final List<String> DB_PROBE = ['pg_isready', '-U', 'postgres', '-d', 'zfindb']
     static List<String> dbHealthCheck(String container) {

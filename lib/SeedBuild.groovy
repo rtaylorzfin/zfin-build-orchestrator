@@ -1,10 +1,11 @@
-// SeedBuild -- `z seed build`: make a seed from a db dump (and a solr snapshot) by running the
+// SeedBuild -- `z seed new`: make a seed from a db dump (and a solr snapshot) by running the
 // whole build in a throwaway stack, capturing the result, and throwing the stack away.
+// (`z seed new --from PROJECT` copies a stack that is already loaded instead: z seed --help.)
 //
-//   z seed build [--db PATH|latest] [--solr PATH|latest] [--tag TAG] [--ref REF]
-//                [--db-platform PLATFORM] [--caches] [--build | --pull] [--keep] [--tmux]
-//   z seed build --tag TAG --resume     carry on with a build that stopped
-//   z seed build --tag TAG --clean      discard one: its stack, worktree and staging
+//   z seed new [--db PATH|latest] [--solr PATH|latest] [--tag TAG] [--ref REF]
+//              [--db-platform PLATFORM] [--caches] [--build | --pull] [--keep] [--tmux]
+//   z seed new --tag TAG --resume     carry on with a build that stopped
+//   z seed new --tag TAG --clean      discard one: its stack, worktree and staging
 //
 //   --db PATH     a .bak file, or a directory holding one. Default (or `latest`): the dump
 //                 `gradle loaddb` would pick from DOCKER_DB_UNLOADS_PATH.
@@ -19,7 +20,7 @@
 //                 amd64 image the Linux VMs run, so the seed restores there; the seed records it
 //                 as its `platform`. Postgres runs under Rosetta then -- roughly 1.3-1.7x slower
 //                 for a load -- while compile and tomcat stay native.
-//   --caches      also capture gradle/maven/npm into the seed (as z seed create --caches).
+//   --caches      also capture gradle/maven/npm into the seed (as z seed new --from --caches).
 //   --build       build the stock images instead of pulling them (z build configure --build).
 //   --pull        pull the stock images even when this host has them. Off by default: image
 //                 tags are host-wide, so a pull replaces a locally built image for every stack
@@ -29,7 +30,7 @@
 //                 terminal that started it.
 //
 // WHAT RUNS. The phases GoCD runs -- `z build` configure, load-db, load-solr, deploy-jenkins,
-// deploy -- then `z seed create` against the result. No second build recipe, and the capture
+// deploy -- then `z seed new --from` against the result. No second build recipe, and the capture
 // gets the WAL trim, checksums and app-tier check every seed gets. The manifest also records
 // what the seed was built from (`built_from`: dump, its checksum, snapshot, commit), which a
 // seed captured from an existing stack cannot know.
@@ -76,7 +77,7 @@ class SeedBuild {
                 case '--tmux':   tmux = true; break
                 case '--resume': resume = true; break
                 case '--clean':  clean = true; break
-                default: die("z seed build: unknown arg '${args[i]}' (see z seed build --help)", 2)
+                default: die("z seed new: unknown arg '${args[i]}' (see z seed new --help)", 2)
             }
         }
         tag = tag ?: java.time.LocalDate.now().toString()
@@ -114,7 +115,7 @@ class SeedBuild {
             // --tag pinned, so a build started just before midnight does not change its name.
             def inner = (args - ['--tmux']) + (args.contains('--tag') ? [] : ['--tag', tag])
             def q = { String a -> "'" + a.replace("'", "'\\''") + "'" }
-            def cmd = "ZFIN_SEED_BUILD_IN_TMUX=1 ${q(new File(zfinUtil.HOME, 'z').absolutePath)} seed build " +
+            def cmd = "ZFIN_SEED_BUILD_IN_TMUX=1 ${q(new File(zfinUtil.HOME, 'z').absolutePath)} seed new " +
                       inner.collect { q(it as String) }.join(' ') +
                       "; echo; read -r -p '[z seed build finished -- Enter closes this window] ' _"
             runCommand(['tmux', 'new-session', '-d', '-s', project, '-c', cwd.absolutePath, cmd])
@@ -166,8 +167,8 @@ class SeedBuild {
         def nextPhase = { Map st -> allPhases.find { !(it in (st.done ?: [])) } }
         if (state && !resume)
             die("a seed build for '$tag' already exists at $stage (next phase: ${nextPhase(state)}).\n" +
-                "   carry on with it:  z seed build --tag $tag --resume\n" +
-                "   or discard it:     z seed build --tag $tag --clean")
+                "   carry on with it:  z seed new --tag $tag --resume\n" +
+                "   or discard it:     z seed new --tag $tag --clean")
         if (resume && !state) die("no seed build for '$tag' to resume (looked for $stateF)")
 
         def timer = zfinUtil.stepTimer()
@@ -179,7 +180,7 @@ class SeedBuild {
             // A phase marked done is only worth skipping if what it produced is still there.
             if ('load-db' in state.done && !zfinUtil.volumeExists("${project}_pg_data"))
                 die("the build stack's database volume is gone (${project}_pg_data), so the finished\n" +
-                    "   phases cannot be trusted. Start over:  z seed build --tag $tag --clean")
+                    "   phases cannot be trusted. Start over:  z seed new --tag $tag --clean")
         } else {
             state = prepare(tag, project, dbArg, solrArg, ref, dbPlatform, caches, buildImages, stage, envF, src,
                             baseEnv, repoTop, zfinUtil)
@@ -196,8 +197,8 @@ class SeedBuild {
             System.err.println("!! seed build '$tag' stopped during ${running.phase}.")
             System.err.println("   The build stack is left as it was, so you can look at it, e.g.:")
             System.err.println("     $inspectHint")
-            System.err.println("   carry on from ${running.phase}:  z seed build --tag $tag --resume")
-            System.err.println("   or discard it:        z seed build --tag $tag --clean")
+            System.err.println("   carry on from ${running.phase}:  z seed new --tag $tag --resume")
+            System.err.println("   or discard it:        z seed new --tag $tag --clean")
         } as Runnable))
 
         // ---- the build ----------------------------------------------------------------------
@@ -234,7 +235,7 @@ class SeedBuild {
                     solr_snapshot : state.solr.name,
                     ref           : state.ref,
                     commit        : state.commit]
-            new Seed().run(['create', '--from', project, '--tag', tag] + (caches ? ['--caches'] : []), zfinUtil)
+            new Seed().run(['new', '--from', project, '--tag', tag] + (caches ? ['--caches'] : []), zfinUtil)
             state.done << 'capture'; save(state)
             timer.mark('capture')
         }
@@ -245,7 +246,7 @@ class SeedBuild {
             running.finished = true
             info("--keep: the build stack '$project' is still up. Look at it with, e.g.:")
             println "     $inspectHint"
-            info("remove it when done:  z seed build --tag $tag --clean")
+            info("remove it when done:  z seed new --tag $tag --clean")
         } else {
             teardown()
             running.finished = true
@@ -273,7 +274,7 @@ class SeedBuild {
                 "   Pick another --tag, or remove it:  z seed rm $tag")
         if (zfinUtil.volumeExists("${project}_pg_data"))
             die("volumes for '$project' already exist but there is no build state in $stage.\n" +
-                "   Clear them first:  z seed build --tag $tag --clean")
+                "   Clear them first:  z seed new --tag $tag --clean")
 
         // ---- the db dump --------------------------------------------------------------------
         File dump; boolean configuredDb
@@ -375,7 +376,7 @@ class SeedBuild {
         // host port on loopback, so this stack can never collide with another. The vhost key is
         // present but EMPTY so no proxy on the host discovers it.
         def ephemeral = '127.0.0.1:'
-        zfinUtil.writeStackEnv(baseEnv, envF, [], "z seed build '$tag'", [
+        zfinUtil.writeStackEnv(baseEnv, envF, [], "z seed new '$tag'", [
                 COMPOSE_PROJECT_NAME    : project,
                 DOCKER_SOURCE_ROOTS_PATH: src.absolutePath,
                 DOCKER_VIRTUAL_HOST     : zfinUtil.featureHost(project),
