@@ -873,8 +873,21 @@ teardown:
         if (failed)
             System.err.println("!! ${failed.size()} post-provision step(s) failed: ${failed.join(', ')} -- the stack itself is provisioned; re-run them from the next: block above.")
 
-// Attach LAST, after the summary has been printed, so it stays on the terminal's scrollback
-// behind the tmux screen. Inside tmux already (z run from a pane), attach-session would
+        // Timings before the attach, not after it: printed after, they sat behind the tmux screen
+        // until you detached.
+        timer.report("provision '$slug' timing")
+        if (volSecs) {
+            // Restores run CONCURRENTLY, so these sum to more than the step they belong to --
+            // that gap is the parallelism doing its job, not an accounting error.
+            println "    per volume (concurrent):"
+            volSecs.sort { -it.value.secs }.each { vn, v ->
+                println String.format("      %-16s %11s  %8.0f MB  %6.0f MB/s",
+                        vn, zfinUtil.dur(v.secs), v.mb, v.secs > 0 ? v.mb / v.secs : 0)
+            }
+        }
+
+// Attach LAST, after the summary and timings have been printed, so they stay on the
+// terminal's scrollback behind the tmux screen. Inside tmux already (z run from a pane), attach-session would
 // refuse to nest -- switch-client moves the existing client to the new session instead.
         if (willAttach) {
             if (System.getenv('TMUX')) {
@@ -886,17 +899,6 @@ teardown:
             }
         } else if (tmuxReady) {
             info("no TTY to attach to -- `tmux attach -t $slug` when you're back at a terminal")
-        }
-
-        timer.report("provision '$slug' timing")
-        if (volSecs) {
-            // Restores run CONCURRENTLY, so these sum to more than the step they belong to --
-            // that gap is the parallelism doing its job, not an accounting error.
-            println "    per volume (concurrent):"
-            volSecs.sort { -it.value.secs }.each { vn, v ->
-                println String.format("      %-16s %11s  %8.0f MB  %6.0f MB/s",
-                        vn, zfinUtil.dur(v.secs), v.mb, v.secs > 0 ? v.mb / v.secs : 0)
-            }
         }
     }
 }
