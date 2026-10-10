@@ -11,7 +11,7 @@
 //
 //   restore          Restore a seed into the stack that owns the working directory -- the
 //                    base checkout's own stack, typically, which `z feature new` never touches.
-//                    db+solr by default; --app adds the deployed app tier and Jenkins home,
+//                    db+solr by default; --app adds the deployed app tier, Jenkins home and the static release,
 //                    --caches the build caches. Existing volumes are replaced only with --force,
 //                    and only once no container uses them (`z down` first).
 //
@@ -138,7 +138,7 @@ class Seed {
             def missing = StackConfig.APP_VOLS.findAll { !has(it) }
             if (missing) die("--app: seed '$tag' has no ${missing.join(', ')} -- it carries no app tier to restore")
             vols += StackConfig.APP_VOLS
-            if (has(StackConfig.JENKINS_VOL)) vols << StackConfig.JENKINS_VOL
+            vols += StackConfig.APP_COMPANION_VOLS.findAll { has(it) }
         }
         if (caches) vols += StackConfig.CACHE_VOLS.findAll { has(it) }
         def absent = StackConfig.DATA_VOLS.findAll { !has(it) }
@@ -198,7 +198,7 @@ class Seed {
                     if (tag == null) tag = args[i] else vns << (args[i] as String)
             }
         }
-        def allowed = StackConfig.APP_VOLS + StackConfig.CACHE_VOLS + [StackConfig.JENKINS_VOL]
+        def allowed = StackConfig.APP_VOLS + StackConfig.CACHE_VOLS + StackConfig.APP_COMPANION_VOLS
         def present = { String vn -> zfinUtil.volumeExists("${project}_$vn") }
 
         // No tag on a terminal: ask for each value, offering the one the flags would default to.
@@ -404,9 +404,10 @@ class Seed {
         def present = { List vns -> vns.findAll { runQuietly(['docker', 'volume', 'inspect', "${project}_${it}"]) == 0 } }
         def appPresent = app ? present(appVols) : []
         def cachesPresent = caches ? present(cacheVols) : []
-        // Jenkins home travels with the app tier: a stack restored without it has no jobs and a
-        // different admin secret, so `jenkins-cli` stops working against it.
-        def jenkinsPresent = app ? present([StackConfig.JENKINS_VOL]) : []
+        // Jenkins home and the static release travel with the app tier: a stack restored without
+        // the first has no jobs and a different admin secret, so `jenkins-cli` stops working
+        // against it; without the second, www_data's static links point into an empty volume.
+        def companionsPresent = app ? present(StackConfig.APP_COMPANION_VOLS) : []
         if (app && appPresent.size() < appVols.size())
             info("note: --app skipping absent volumes: ${(appVols - appPresent).join(', ')}")
 
@@ -513,7 +514,7 @@ class Seed {
         // artifact. Names match StackConfig's volume names, because restoreVolumes reads
         // <dir>/<vn>.tgz into <project>_<vn> -- that symmetry is what makes a seed restorable
         // with no translation layer.
-        def vns = StackConfig.DATA_VOLS + appPresent + jenkinsPresent + cachesPresent
+        def vns = StackConfig.DATA_VOLS + appPresent + companionsPresent + cachesPresent
         vns.each { vn ->
             def t = System.currentTimeMillis()
             zfinUtil.captureVolume("${project}_${vn}", new File(out, "${vn}.tgz"))

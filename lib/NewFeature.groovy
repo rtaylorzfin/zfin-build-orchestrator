@@ -397,7 +397,7 @@ class NewFeature {
                             "   release, or point ZFIN_RELEASE at the one the seed was taken from.")
                 }
                 // Sizes only, and only the tarballs this run restores; z seed verify re-hashes.
-                def restoring = StackConfig.DATA_VOLS + (doApp ? StackConfig.APP_VOLS + [StackConfig.JENKINS_VOL] : []) +
+                def restoring = StackConfig.DATA_VOLS + (doApp ? StackConfig.APP_VOLS + StackConfig.APP_COMPANION_VOLS : []) +
                                 (doCaches ? StackConfig.CACHE_VOLS : [])
                 def damaged = sm ? zfinUtil.seedProblems(seed, sm, restoring) : []
                 if (damaged) die("seed '$tag' does not match its manifest:\n   " + damaged.join('\n   ') +
@@ -493,11 +493,10 @@ class NewFeature {
         // there is one: a cold stack (--no-seed) restores nothing.
         // No seed -> no data volumes; --shared-db -> the data is someone else's.
         def dataVols = (doSharedDb || !tag) ? [] : StackConfig.DATA_VOLS
-        // jenkins_data is restored when the seed carries it, independently of warmApp: it is
-        // not part of the warm-app test, so an older seed without it simply has none.
-        def jenkinsPresent = (tag && zfinUtil.archiveFileFor(auxDir, StackConfig.JENKINS_VOL)) ?
-                             [StackConfig.JENKINS_VOL] : []
-        def toRestore = dataVols + (warmApp ? appVols : []) + jenkinsPresent + (warmCaches ? cachesPresent : [])
+        // jenkins_data and static_data are restored when the seed carries them, independently
+        // of warmApp: they are not part of the warm-app test, so an older seed simply has none.
+        def companionsPresent = tag ? StackConfig.APP_COMPANION_VOLS.findAll { zfinUtil.archiveFileFor(auxDir, it) } : []
+        def toRestore = dataVols + (warmApp ? appVols : []) + companionsPresent + (warmCaches ? cachesPresent : [])
         def cold = !tag && !doSharedDb
 
         def plan = [useExisting ? 'worktree (existing branch)' : 'worktree + branch', 'per-feature .env']

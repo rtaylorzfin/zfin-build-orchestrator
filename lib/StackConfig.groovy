@@ -148,6 +148,13 @@ class StackConfig {
     // Freeze without it discarded a stack's whole Jenkins setup on `down -v`, and thaw could
     // not bring it back.
     static final String JENKINS_VOL = 'jenkins_data'
+    // The zfin-static release `gradle make` downloads (home;static;deployFromRelease), which
+    // www_data only SYMLINKS into (home/ZFIN, home/zf_info, ...). A seed without it restores
+    // those links pointing into an empty volume, so every feature had to `gradle make` again.
+    static final String STATIC_VOL = 'static_data'
+    // What travels WITH the app tier when present, outside the warm-app test for the reason
+    // given at JENKINS_VOL: a seed captured before one of these was added stays warm.
+    static final List<String> APP_COMPANION_VOLS = [JENKINS_VOL, STATIC_VOL]
     static final String CLAUDE_SERVICE = 'claude'
 
     // Where the host keeps the sidecar's auth token (`claude setup-token`).

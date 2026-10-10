@@ -93,7 +93,7 @@ class FeatureFreeze {
         vols += StackConfig.APP_VOLS
         if (doCaches) vols += StackConfig.CACHE_VOLS
         vols += StackConfig.CLAUDE_VOL
-        vols += StackConfig.JENKINS_VOL
+        vols += StackConfig.APP_COMPANION_VOLS
         // Only what actually exists: a stack that never started has no volumes, --caches on a
         // stack with no cache volumes should not fail, and claude_home is absent until the
         // sidecar lands.

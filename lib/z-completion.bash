@@ -27,7 +27,7 @@ _z_complete() {
                     build)       COMPREPLY=( $(compgen -W "--db --solr --tag --ref --db-platform --caches --build --pull --keep --tmux --resume --clean" -- "$cur") ) ;;
                     restore)     COMPREPLY=( $(compgen -W "--app --caches --force" -- "$cur") ) ;;
                     rm)          COMPREPLY=( $(compgen -W "--force" -- "$cur") ) ;;
-                    add-volumes) COMPREPLY=( $(compgen -W "--from --force gradle_cache maven_cache npm_cache jenkins_data" -- "$cur") ) ;;
+                    add-volumes) COMPREPLY=( $(compgen -W "--from --force gradle_cache maven_cache npm_cache jenkins_data static_data" -- "$cur") ) ;;
                 esac
             fi ;;
         scaffold)                  COMPREPLY=( $(compgen -W "--root --no-mounts --dry-run" -- "$cur") ) ;;
