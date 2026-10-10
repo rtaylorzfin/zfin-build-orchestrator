@@ -54,6 +54,9 @@
 // on from the phase that stopped instead of reloading the database.
 class SeedBuild {
     static final List<String> BUILD_PHASES = ['configure', 'load-db', 'load-solr', 'deploy-jenkins', 'deploy']
+    // The two ways out of a stopped build, named in several messages.
+    static String resumeCmd(String tag) { "z seed new --tag $tag --resume" }
+    static String cleanCmd(String tag)  { "z seed new --tag $tag --clean" }
 
     def run(List args, ZfinUtil zfinUtil) {
         if (zfinUtil.helpRequested(args, this)) return
@@ -117,7 +120,7 @@ class SeedBuild {
             def q = { String a -> "'" + a.replace("'", "'\\''") + "'" }
             def cmd = "ZFIN_SEED_BUILD_IN_TMUX=1 ${q(new File(zfinUtil.HOME, 'z').absolutePath)} seed new " +
                       inner.collect { q(it as String) }.join(' ') +
-                      "; echo; read -r -p '[z seed build finished -- Enter closes this window] ' _"
+                      "; echo; read -r -p '[seed build finished -- Enter closes this window] ' _"
             runCommand(['tmux', 'new-session', '-d', '-s', project, '-c', cwd.absolutePath, cmd])
             info("seed build running in tmux session '$project' (Ctrl-b d to detach; it keeps running)")
             if (System.console() == null) { info("reattach with:  tmux attach -t $project"); return }
@@ -167,8 +170,8 @@ class SeedBuild {
         def nextPhase = { Map st -> allPhases.find { !(it in (st.done ?: [])) } }
         if (state && !resume)
             die("a seed build for '$tag' already exists at $stage (next phase: ${nextPhase(state)}).\n" +
-                "   carry on with it:  z seed new --tag $tag --resume\n" +
-                "   or discard it:     z seed new --tag $tag --clean")
+                "   carry on with it:  ${resumeCmd(tag)}\n" +
+                "   or discard it:     ${cleanCmd(tag)}")
         if (resume && !state) die("no seed build for '$tag' to resume (looked for $stateF)")
 
         def timer = zfinUtil.stepTimer()
@@ -180,7 +183,7 @@ class SeedBuild {
             // A phase marked done is only worth skipping if what it produced is still there.
             if ('load-db' in state.done && !zfinUtil.volumeExists("${project}_pg_data"))
                 die("the build stack's database volume is gone (${project}_pg_data), so the finished\n" +
-                    "   phases cannot be trusted. Start over:  z seed new --tag $tag --clean")
+                    "   phases cannot be trusted. Start over:  ${cleanCmd(tag)}")
         } else {
             state = prepare(tag, project, dbArg, solrArg, ref, dbPlatform, caches, buildImages, stage, envF, src,
                             baseEnv, repoTop, zfinUtil)
@@ -197,8 +200,8 @@ class SeedBuild {
             System.err.println("!! seed build '$tag' stopped during ${running.phase}.")
             System.err.println("   The build stack is left as it was, so you can look at it, e.g.:")
             System.err.println("     $inspectHint")
-            System.err.println("   carry on from ${running.phase}:  z seed new --tag $tag --resume")
-            System.err.println("   or discard it:        z seed new --tag $tag --clean")
+            System.err.println("   carry on from ${running.phase}:  ${resumeCmd(tag)}")
+            System.err.println("   or discard it:        ${cleanCmd(tag)}")
         } as Runnable))
 
         // ---- the build ----------------------------------------------------------------------
@@ -229,7 +232,7 @@ class SeedBuild {
             println "\n>> seed build $label"
             running.phase = 'capture'
             zfinUtil.seedProvenance = [
-                    how           : 'z seed build',
+                    how           : 'z seed new',
                     db_dump       : state.db.name,
                     db_dump_sha256: state.db.sha256,
                     solr_snapshot : state.solr.name,
@@ -246,7 +249,7 @@ class SeedBuild {
             running.finished = true
             info("--keep: the build stack '$project' is still up. Look at it with, e.g.:")
             println "     $inspectHint"
-            info("remove it when done:  z seed new --tag $tag --clean")
+            info("remove it when done:  ${cleanCmd(tag)}")
         } else {
             teardown()
             running.finished = true
@@ -274,7 +277,7 @@ class SeedBuild {
                 "   Pick another --tag, or remove it:  z seed rm $tag")
         if (zfinUtil.volumeExists("${project}_pg_data"))
             die("volumes for '$project' already exist but there is no build state in $stage.\n" +
-                "   Clear them first:  z seed new --tag $tag --clean")
+                "   Clear them first:  ${cleanCmd(tag)}")
 
         // ---- the db dump --------------------------------------------------------------------
         File dump; boolean configuredDb

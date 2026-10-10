@@ -3,7 +3,7 @@
 //
 //   ./check
 //
-// Two checks, because one is not enough and neither is obvious from running `z`:
+// Three checks, because none is obvious from running `z`:
 //
 // 1. COMPILE every command class. `z --help` prints its usage from a string constant and
 //    never loads a command class, so it is not a compile check -- a syntax or scope error in
@@ -16,7 +16,13 @@
 //    That shipped twice: FeatureRemove's teardown chown and SharedStack's seeded-volume check,
 //    the second reaching a user. Check 1 cannot see either.
 //
-// Neither check runs anything or touches Docker. Exit 0 = clean.
+// 3. FIND RETIRED COMMAND NAMES. Errors and hints name the command to run next, so a rename
+//    touches every one of them, and a missed one still works through the old name's alias --
+//    pointing people at a spelling the help no longer shows, with nothing to say so. RETIRED
+//    lists each old spelling and its replacement; add one whenever a command is renamed.
+//    Scans lib/, z and docs/, except the docs that record past sessions verbatim.
+//
+// None of the checks runs anything or touches Docker. Exit 0 = clean.
 def libDir = new File(getClass().protectionDomain.codeSource.location.toURI()).parentFile
 def lib = new File(libDir, 'lib')
 if (!lib.isDirectory()) { System.err.println("!! no lib/ next to this script ($lib)"); System.exit(2) }
@@ -73,6 +79,28 @@ lib.listFiles().findAll { it.name.endsWith('.groovy') && !(it.name in ['ZfinUtil
     }
 }
 if (bad == 0) println "  none"
+
+// ---- 3. no retired command names ----------------------------------------------------------
+def RETIRED = ['z seed create': 'z seed new --from <project>',
+               'z seed build' : 'z seed new']
+def transcripts = ['dev-stacks-by-example.md']   // recorded sessions: they show what was typed then
+def scanned = [new File(libDir, 'z')] +
+              lib.listFiles().findAll { it.name.endsWith('.groovy') || it.name.endsWith('.sh') || it.name.endsWith('.bash') } +
+              (new File(libDir, 'docs').listFiles() ?: []).findAll { it.name.endsWith('.md') && !(it.name in transcripts) }
+println "\nretired command names:"
+int stale = 0
+scanned.sort { it.path }.each { f ->
+    f.readLines().eachWithIndex { line, i ->
+        RETIRED.each { old, now ->
+            if (line =~ /\b\Q${old}\E\b/) {
+                stale++
+                println "  ${libDir.toPath().relativize(f.toPath())}:${i + 1}  '${old}' -- now '${now}'"
+            }
+        }
+    }
+}
+bad += stale
+if (stale == 0) println "  none"
 
 println bad == 0 ? "\nclean" : "\n${bad} problem(s)"
 System.exit(bad == 0 ? 0 : 1)

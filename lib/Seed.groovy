@@ -97,6 +97,9 @@ class Seed {
         }
     }
 
+    // Said wherever a command needs a seed and the host has none.
+    static final String NO_SEEDS = "no seeds on this host -- make one:  z seed new"
+
     // ---- z seed ls ---------------------------------------------------------------------
     private void list(List args, ZfinUtil zfinUtil) {
         def dir = zfinUtil.seedsDir()
@@ -135,7 +138,7 @@ class Seed {
             }
         }
         tag = tag ?: zfinUtil.newestSeed()
-        if (!tag) die("no seeds on this host -- make one:  z seed new")
+        if (!tag) die(NO_SEEDS)
         def seed = zfinUtil.seedDir(tag)
         def manifest = zfinUtil.readSeedManifest(seed)
         if (!manifest) die("no seed '$tag' at $seed (z seed ls lists them)")
@@ -224,7 +227,7 @@ class Seed {
         if (!tag && con) {
             def seeds = (zfinUtil.seedsDir().listFiles() ?: [])
                     .findAll { it.isDirectory() && zfinUtil.readSeedManifest(it) }*.name.sort()
-            if (!seeds) die("no seeds on this host -- make one:  z seed new")
+            if (!seeds) die(NO_SEEDS)
             def newest = zfinUtil.newestSeed()
             println "seeds: ${seeds.join('  ')}"
             tag = con.readLine("  seed to add to [$newest]: ")?.trim() ?: newest
@@ -305,7 +308,7 @@ class Seed {
     private void verify(List args, ZfinUtil zfinUtil) {
         def die = zfinUtil.&die; def info = zfinUtil.&info
         def tag = args.find { !it.startsWith('-') } ?: zfinUtil.newestSeed()
-        if (!tag) die("no seeds on this host -- make one:  z seed new")
+        if (!tag) die(NO_SEEDS)
         def seed = zfinUtil.seedDir(tag)
         def manifest = zfinUtil.readSeedManifest(seed)
         if (!manifest) die("no seed '$tag' at $seed (z seed ls lists them)")
@@ -347,7 +350,7 @@ class Seed {
         info(String.format("deleted seed '%s' (%.1fG)", tag, bytes / 1073741824.0))
     }
 
-    // ---- z seed new --from (and the old z seed create) -------------------------------
+    // ---- z seed new --from (and the old `create`) -------------------------------------
     private void create(List args, ZfinUtil zfinUtil) {
         def die = zfinUtil.&die; def info = zfinUtil.&info; def runCommand = zfinUtil.&runCommand
         def runQuietly = zfinUtil.&runQuietly
