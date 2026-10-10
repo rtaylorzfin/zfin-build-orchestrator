@@ -37,6 +37,7 @@ class Config {
                 println "tree file: ${describe(zfinUtil.treeConfigFile())}"
                 println ""
                 def w = known.keySet()*.size().max()
+                println String.format("  %-${w}s  %-7s  %s", 'SETTING', 'FROM', 'VALUE')
                 known.each { k, what ->
                     def (v, note) = effective(k, zfinUtil)
                     def src = zfinUtil.settingSource(k) ?: 'default'
@@ -44,7 +45,8 @@ class Config {
                     if (lng) println String.format("  %-${w}s  %-7s  %s", '', '', what)
                 }
                 println ""
-                println "tree: set in the tree file (z config set)   env: this shell's environment, which wins"
+                println "FROM:  env = this shell's environment (wins over the rest)   tree = the tree file (z config set)"
+                println "       default = set in neither; the value z works out for itself"
                 if (!lng) println "what each setting is:  z config ls -l"
                 break
             case 'get':
@@ -102,7 +104,9 @@ class Config {
             case 'ZFIN_ARCHIVE_DIR':   return under('archive')
             case 'ZFIN_CACHE_DIR':     return under('cache')
             case 'ZFIN_SEED':
-                def dir = root ? new File(root, 'seeds') : null
+                // Wherever the seeds are: ZFIN_SEEDS_DIR may point off the tree.
+                def sd = zfinUtil.setting('ZFIN_SEEDS_DIR') ?: (root ? "$root/seeds" : null)
+                def dir = sd ? new File(sd) : null
                 def newest = dir?.isDirectory() ? zfinUtil.newestSeed() : null
                 return newest ? [newest, 'the newest seed'] : [null, 'no seeds yet']
             case 'ZFIN_FEATURE_BIND':   return [zfinUtil.featureBind(), null]
