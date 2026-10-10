@@ -81,6 +81,8 @@ place at a time, so a feature cannot use the branch `main/` currently has.
 
 `z` finds the main checkout by asking git, so this layout is a recommendation: a checkout kept
 elsewhere works too, with `ZFIN_DEV_ROOT` exported to name the tree (see Configuration).
+Outside any ZFIN checkout but inside the tree -- the tree root, `worktrees/`, `orchestrator/` --
+`z` uses `worktrees/main`, so `z feature ls` and the like work from anywhere in the tree.
 
 ---
 

@@ -56,13 +56,30 @@ class ZfinUtil {
             // bare relative ".git".
             def common = captureOutput(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
             if (common) r = new File(common).parentFile
+            // Not in one (the tree root, say, or orchestrator/, a repo of its own): the dev
+            // tree's main checkout, worktrees/main, the one docs/dev-tree-layout.md puts there.
+            if (!isZfinCheckout(r) && treeRoot()) {
+                def main = treeMainCheckout()
+                if (isZfinCheckout(main)) {
+                    def c = captureOutput(['git', '-C', main.path, 'rev-parse', '--path-format=absolute', '--git-common-dir'])
+                    r = c ? new File(c).parentFile : main
+                }
+            }
         }
-        if (!r || !new File(r, 'docker/docker-compose.yml').isFile())
-            die(explicit ? "ZFIN_REPO=$explicit is not a ZFIN checkout (no docker/docker-compose.yml there)"
-                         : "not inside a ZFIN checkout -- cd into one (or a feature worktree), or set ZFIN_REPO")
+        if (!isZfinCheckout(r)) {
+            if (explicit) die("ZFIN_REPO=$explicit is not a ZFIN checkout (no docker/docker-compose.yml there)")
+            def main = treeRoot() ? treeMainCheckout() : null
+            die("not inside a ZFIN checkout -- cd into one (or a feature worktree), or set ZFIN_REPO" +
+                (main ? "\n   (this dev tree's main checkout, $main, ${main.isDirectory() ? 'is not a ZFIN checkout' : 'does not exist'}" +
+                        " -- clone it there:  z scaffold)" : ''))
+        }
         checkComposeVersion(r.canonicalFile)
         repoCache = r.canonicalFile
     }
+
+    private static boolean isZfinCheckout(File d) { d && new File(d, 'docker/docker-compose.yml').isFile() }
+    /** The dev tree's main checkout: worktrees/main (under ZFIN_WORKTREES_DIR when set). */
+    private File treeMainCheckout() { new File(setting('ZFIN_WORKTREES_DIR') ?: "${treeRoot().path}/worktrees", 'main') }
 
     /** The version of a ZFIN checkout's compose file, as the interface this tooling depends on:
      *  the top-level `x-zfin-compose-version: N` in its docker/docker-compose.yml, or null when
