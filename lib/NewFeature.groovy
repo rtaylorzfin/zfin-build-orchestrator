@@ -672,7 +672,7 @@ class NewFeature {
         if (toRestore) {
             step('restore volumes')
             restore(toRestore)
-            info(String.format("restore total: %s", zfinUtil.dur((System.currentTimeMillis() - warmT0) / 1000.0)))
+            info(String.format("restore total: %s (parallel tasks)", zfinUtil.dur((System.currentTimeMillis() - warmT0) / 1000.0)))
         }
 
         // Caches the seed did not carry start as empty volumes; see prepareCacheVolumes.
