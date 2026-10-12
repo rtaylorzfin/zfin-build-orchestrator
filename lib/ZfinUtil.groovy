@@ -518,6 +518,11 @@ class ZfinUtil {
         def results = new Object[vns.size()]
         def threads = []
         def img = tarImage()
+        // gzip inflate is single-threaded and dominates restore time (reading the archive is
+        // ~3s of a ~90s pg_data extract); pigz moves I/O and CRC onto other threads and roughly
+        // halves it. Probed once, here, rather than from the threads: hasPigz() caches without
+        // a lock. Only asked when there is a .tgz to decompress.
+        def pigz = vns.any { archiveFileFor(srcDir, it)?.name?.endsWith('.tgz') } && hasPigz()
         vns.eachWithIndex { vn, idx ->
             threads << Thread.start {
                 def vol = "${project}_${vn}"
@@ -541,8 +546,10 @@ class ZfinUtil {
                                    '-v', "${vol}:/data",
                                    '-v', "${srcDir.absolutePath}:/in:ro",
                                    // `xf`, not `xzf`: GNU tar sniffs the compression, so one
-                                   // path handles both .tar and .tgz archives.
-                                   img, 'xf', "/in/${tgz.name}", '-C', '/data'])
+                                   // path handles both .tar and .tgz archives -- but sniffing
+                                   // picks plain gzip, so name pigz when there is one.
+                                   img] + (pigz && tgz.name.endsWith('.tgz') ? ['-I', 'pigz'] : []) +
+                                  ['-xf', "/in/${tgz.name}", '-C', '/data'])
                     def ok = cr.code == 0 && ex.code == 0
                     results[idx] = [vn: vn, vol: vol, mb: mb, file: tgz.name,
                                     secs: (System.currentTimeMillis() - t0) / 1000.0,
