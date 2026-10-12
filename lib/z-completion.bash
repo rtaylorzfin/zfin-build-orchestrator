@@ -1,6 +1,17 @@
 # Bash tab-completion for `z`. `z shell-init` prints the line that sources it.
 #   z <TAB>          -> subcommands           z build <TAB>   -> phases
 #   z run <TAB>      -> services              z feature <TAB> -> new | ls | rm | refresh | ...
+#   z feature rm|freeze|thaw|refresh <TAB>   -> feature names (the worktrees, less main)
+# Feature names for `z feature rm <TAB>` and friends: the worktrees there are, less `main`.
+# Read off the directory, as `wt <TAB>` does (lib/z-nav.sh, which shell-init sources too),
+# rather than from `z feature ls` -- a keystroke should not cost a JVM start and a docker call.
+_z_features() {
+    local w
+    type _zfin_worktrees >/dev/null 2>&1 || return
+    w="$(_zfin_worktrees 2>/dev/null)" || return
+    find "$w" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sed 's#.*/##' | grep -vx main
+}
+
 _z_complete() {
     local cur sub argstart=2
     cur="${COMP_WORDS[COMP_CWORD]}"
@@ -57,11 +68,15 @@ _z_complete() {
                 case "${COMP_WORDS[argstart]}" in
                     ls|list)         COMPREPLY=( $(compgen -W "--all --frozen" -- "$cur") ) ;;
                     new)             COMPREPLY=( $(compgen -W "-y --yes --base --branch --existing-branch --no-existing-branch --seed --no-seed --port-offset --up --no-up --no-app --no-caches --shared-db --no-shared-db --node --no-node --deploy --no-deploy --liquibase --no-liquibase --tmux --no-tmux" -- "$cur") ) ;;
-                    rm)              COMPREPLY=( $(compgen -W "--force --keep-archive --no-session" -- "$cur") ) ;;
-                    session)         COMPREPLY=( $(compgen -W "export ls" -- "$cur") ) ;;
-                    freeze)          COMPREPLY=( $(compgen -W "--caches --compress --no-compress --to --force" -- "$cur") ) ;;
-                    thaw)            COMPREPLY=( $(compgen -W "--from --no-up --no-caches --force" -- "$cur") ) ;;
-                    refresh)         COMPREPLY=( $(compgen -W "--all --dry-run" -- "$cur") ) ;;
+                    rm)              COMPREPLY=( $(compgen -W "$(_z_features) --force --keep-archive --no-session" -- "$cur") ) ;;
+                    session)         if (( COMP_CWORD == argstart + 1 )); then
+                                         COMPREPLY=( $(compgen -W "export ls" -- "$cur") )
+                                     elif [[ "${COMP_WORDS[argstart+1]}" == export ]]; then
+                                         COMPREPLY=( $(compgen -W "$(_z_features)" -- "$cur") )
+                                     fi ;;
+                    freeze)          COMPREPLY=( $(compgen -W "$(_z_features) --caches --compress --no-compress --to --force" -- "$cur") ) ;;
+                    thaw)            COMPREPLY=( $(compgen -W "$(_z_features) --from --no-up --no-caches --force" -- "$cur") ) ;;
+                    refresh)         COMPREPLY=( $(compgen -W "$(_z_features) --all --dry-run" -- "$cur") ) ;;
                 esac
             fi ;;
     esac
