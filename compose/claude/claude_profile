@@ -46,6 +46,18 @@ for k in ('hasCompletedOnboarding', 'hasTrustDialogAccepted'):
     if not d.get(k):
         d[k] = True
         changed = True
+# 2c. The headless browser (see the Dockerfile), as a user-scope MCP server. Added only when
+#     absent, so an entry you have edited survives. Playwright's Chromium, not the default
+#     Chrome channel, which does not exist here; --isolated keeps no profile between runs;
+#     --ignore-https-errors because the stack's https://httpd serves a self-signed cert.
+servers = d.setdefault('mcpServers', {})
+if 'playwright' not in servers:
+    servers['playwright'] = {
+        'type': 'stdio',
+        'command': 'playwright-mcp',
+        'args': ['--headless', '--browser', 'chromium', '--isolated', '--ignore-https-errors'],
+    }
+    changed = True
 if changed:
     os.makedirs(os.path.dirname(p), exist_ok=True)
     json.dump(d, open(p, 'w'))

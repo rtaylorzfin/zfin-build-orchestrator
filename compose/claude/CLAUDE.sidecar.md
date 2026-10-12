@@ -32,6 +32,12 @@ worktree, mounted read-write. It is the only source tree you can reach.
 those hostnames; `gradle loaddb` / `loadsolr` (the dumps are mounted read-only) — note
 **loaddb destroys and rebuilds this stack's database**, so confirm before running it.
 
+**Look at the running site:** the stack's web server is `http://httpd/` (or `https://httpd/`,
+self-signed). Use the `playwright` MCP tools to drive a headless Chromium — navigate, click,
+read console errors, screenshot — when checking a UI change; `playwright screenshot URL out.png`
+does a one-off from the shell. Tomcat's logs are in
+`/opt/zfin/catalina_bases/zfin.org/logs`: `catalina.out`, `catalina.json`, access logs.
+
 **Cannot, by construction rather than by rule:**
 
 - **`git push`** — this container has no SSH agent and no keys, so there is nothing to

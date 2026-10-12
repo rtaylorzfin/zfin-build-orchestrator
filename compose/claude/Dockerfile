@@ -29,6 +29,28 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs" \
     && npm cache clean --force
 
+# A headless browser, so the agent can check a page it changed the way a user would see it --
+# JavaScript, rendering, console errors -- rather than stopping at a 200 from curl. Two pieces:
+#   - the Playwright MCP server, which gives `claude` browser tools (navigate, click, snapshot,
+#     screenshot); claude_profile registers it
+#   - Playwright's own Chromium build, plus the system libraries it needs (--with-deps)
+# Playwright's Chromium rather than Google Chrome or Ubuntu's: Chrome ships no Linux arm64
+# build, and noble's chromium package is a snap stub that cannot run in a container.
+# The browser is installed by the MCP server's OWN bundled playwright, because each Playwright
+# release expects one exact browser revision; installing from a separate `playwright` package
+# could fetch a revision the server then cannot find. The `playwright` wrapper exposes that
+# same CLI (e.g. `playwright screenshot URL out.png`), so both always agree.
+# Browsers go in a shared path rather than root's ~/.cache, where gradle could not read them.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+ARG PLAYWRIGHT_MCP_VERSION=0.0.83
+RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
+    && pw="$(npm root -g)/@playwright/mcp/node_modules/playwright/cli.js" \
+    && node "$pw" install --with-deps chromium \
+    && printf '#!/bin/sh\nexec node %s "$@"\n' "$pw" > /usr/local/bin/playwright \
+    && chmod 0755 /usr/local/bin/playwright \
+    && npm cache clean --force \
+    && rm -rf /var/lib/apt/lists/*
+
 # Defaults seeded into ~/.claude on first run. They cannot simply live at ~/.claude/ in the
 # image: the claude_home VOLUME mounts over that path, so anything baked there is hidden.
 # The profile below copies them in when the volume is empty, which also means an existing
