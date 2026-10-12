@@ -511,8 +511,9 @@ class ZfinUtil {
         def announce = { Map r ->
             synchronized (lock) {
                 done++
-                info(String.format("  [%d/%d] %-14s %7.0f MB in %7s%s",
-                        done, vns.size(), r.vn, r.mb, dur(r.secs), r.ok ? '' : '   !! FAILED'))
+                info(String.format("  [%d/%d] %-14s %7.0f MB in %7s%s%s",
+                        done, vns.size(), r.vn, r.mb, dur(r.secs),
+                        r.tool ? " (${r.tool})" : '', r.ok ? '' : '   !! FAILED'))
             }
         }
         def results = new Object[vns.size()]
@@ -529,6 +530,9 @@ class ZfinUtil {
                 def cname = "zfin-restore-${project}-${vn}"   // deterministic: always cleanable
                 def tgz = archiveFileFor(srcDir, vn) ?: new File(srcDir, "${vn}.tgz")
                 def mb = tgz.isFile() ? tgz.length() / 1048576.0 : 0
+                // What decompresses it, for the progress line: pigz by name, gzip when tar
+                // sniffs a .tgz itself, `uncompressed` for a plain .tar.
+                def tool = !tgz.name.endsWith('.tgz') ? 'uncompressed' : pigz ? 'pigz' : 'gzip'
                 def t0 = System.currentTimeMillis()
                 def run2 = { List c ->
                     def pr = new ProcessBuilder(c*.toString()).redirectErrorStream(true).start()
@@ -548,15 +552,15 @@ class ZfinUtil {
                                    // `xf`, not `xzf`: GNU tar sniffs the compression, so one
                                    // path handles both .tar and .tgz archives -- but sniffing
                                    // picks plain gzip, so name pigz when there is one.
-                                   img] + (pigz && tgz.name.endsWith('.tgz') ? ['-I', 'pigz'] : []) +
+                                   img] + (tool == 'pigz' ? ['-I', 'pigz'] : []) +
                                   ['-xf', "/in/${tgz.name}", '-C', '/data'])
                     def ok = cr.code == 0 && ex.code == 0
-                    results[idx] = [vn: vn, vol: vol, mb: mb, file: tgz.name,
+                    results[idx] = [vn: vn, vol: vol, mb: mb, file: tgz.name, tool: tool,
                                     secs: (System.currentTimeMillis() - t0) / 1000.0,
                                     ok: ok, err: (ok ? '' : (cr.out + ex.out).trim())]
                     announce(results[idx])
                 } catch (Throwable t) {
-                    results[idx] = [vn: vn, vol: vol, mb: mb, file: tgz.name, secs: 0, ok: false, err: t.toString()]
+                    results[idx] = [vn: vn, vol: vol, mb: mb, file: tgz.name, tool: tool, secs: 0, ok: false, err: t.toString()]
                     announce(results[idx])
                 } finally {
                     run2(['docker', 'rm', '-f', cname])   // always remove (normal + error paths)
@@ -721,7 +725,7 @@ class ZfinUtil {
                     tarImage(), '-I', "$compressor -1".toString(), '-cf',
                     "/out/${out.name}", '-C', '/data', rel], [check: false])
         if (code != 0 || !out.isFile() || out.length() == 0) { out.delete(); return }
-        info(String.format("transcripts -> %s (%.1f MB)", out, out.length() / 1048576.0))
+        info(String.format("transcripts -> %s (%.1f MB, %s -1)", out, out.length() / 1048576.0, compressor))
     }
 
         /** The one path a host MUST declare: the parent holding everything this tooling owns.
