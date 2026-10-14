@@ -6,7 +6,7 @@
 # Everything expressible as a VALUE lives in the stack's .env and is read by the base file:
 # published ports, solr sizing (StackConfig.featureEnv). What is left here is what a value cannot
 # say, or what the base file should not have to know about: suppressing services, not
-# advertising to a proxy, and the Claude sidecar.
+# advertising to a proxy, Jenkins' half of DISABLE_OIDC, and the Claude sidecar.
 services:
   # Advertise NOTHING to an outside nginx-proxy. The base file advertises DOCKER_VIRTUAL_HOST,
   # which is right for an instance behind one; a stack of ours on a proxy's host would otherwise
@@ -29,6 +29,26 @@ services:
   # the proxy itself.
   fail2ban:
     profiles: ["feature-fail2ban"]
+  # DISABLE_OIDC=true opens httpd's /jobs gate (the base file), but Jenkins keeps its own OIDC
+  # realm pointed at bouncer. The startup script swaps it for Jenkins' own user database and
+  # puts OIDC back when the flag goes off; see compose/jenkins/zfin-security-realm.groovy, which
+  # also explains the guard copy it leaves in jenkins_data for stacks without this overlay.
+  # Mounted rather than deployed so it is always the current version and never outlives the
+  # overlay; read-only so nothing in the stack can rewrite what runs as SYSTEM on every start.
+  jenkins:
+    environment:
+      DISABLE_OIDC: ${DISABLE_OIDC:-false}
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:-}
+    volumes:
+      # Absolute through ZFIN_COMPOSE_DIR, like the claude build context below. Outside z the
+      # fallback names a path that doesn't exist, and create_host_path: false makes that an
+      # error when Jenkins is created, not an empty directory mounted where the script should be.
+      - type: bind
+        source: ${ZFIN_COMPOSE_DIR:-/ZFIN_COMPOSE_DIR-unset--run-through-z}/jenkins/zfin-security-realm.groovy
+        target: /opt/zfin/www_homes/zfin.org/server_apps/jenkins/jenkins-home/init.groovy
+        read_only: true
+        bind:
+          create_host_path: false
   claude:
     # The per-feature Claude sidecar (docker/claude/Dockerfile).
     # Reached by the verb that already reaches services -- `./z run claude`, like `./z run

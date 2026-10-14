@@ -244,6 +244,19 @@ stack made before it existed (then `z restart httpd tomcat`). It is kept in the 
 certificate its own compile container makes (the ZFIN repo's `generate_base.sh`), which differs
 per stack.
 
+**Without keycloak (`DISABLE_OIDC=true`).** In the base file the flag only opens httpd's gates.
+On a stack with the feature overlay it reaches Jenkins too: a startup script
+(`compose/jenkins/zfin-security-realm.groovy`) switches Jenkins from OIDC to its own user
+database on its next start (`z up jenkins`), saving the OIDC configuration first and creating an
+`admin` account if there is none. The password is `JENKINS_ADMIN_PASSWORD` from the `.env`, or
+generated into `jenkins-home/secrets/initialAdminPassword`. Turn the flag off and the next start
+restores the saved OIDC configuration.
+
+It fails loudly, on purpose. While Jenkins is on local accounts, `jenkins_data` carries a copy of
+the script (`init.groovy.d/zfin-security-realm-guard.groovy`), so a frozen stack, a seed, or a
+volume started with plain `docker compose` still restores OIDC. If there is nothing to restore,
+Jenkins prints how to redeploy `config.xml` and shuts down rather than staying on local accounts.
+
 ---
 
 ## Everyday workflow
