@@ -1156,7 +1156,8 @@ chmod 644 "$C/zfin.org.crt" "$S/keystore"
      *  profiles: [claude]) outlives it. Returns what was removed. */
     List<String> sweepProjectVolumes(String project) {
         def vols = captureOutput(['docker', 'volume', 'ls', '-q', '--filter',
-                                  "label=com.docker.compose.project=$project"]).readLines().findAll { it }
+                                  "label=com.docker.compose.project=$project"]).readLines()
+                .findAll { it && !it.startsWith(StackConfig.CLAUDE_CODE_VOL_PREFIX) }
         if (vols) {
             info("removing ${vols.size()} volume(s) `down -v` left behind: ${vols.join(', ')}")
             vols.each { runQuietly(['docker', 'volume', 'rm', it]) }

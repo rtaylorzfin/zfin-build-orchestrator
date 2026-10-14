@@ -19,15 +19,21 @@ FROM ghcr.io/zfin/zfin-compile:${ZFIN_RELEASE}${DOCKER_ARCH}
 
 USER root
 
-# Pinned rather than @latest: an agent that silently changes version under you is hard to
-# reason about when something starts behaving differently. Bump deliberately.
+# Claude Code updates ITSELF: its auto-updater runs `npm install -g` as whoever runs claude.
+# Under the default global prefix (/usr/lib/node_modules, root-owned) that fails as gradle, so
+# the CLI gets a prefix of its own, owned by gradle; NPM_CONFIG_PREFIX (set below, after the
+# Playwright install, which stays in /usr) points the updater's npm -g at it. The version built
+# here is only the starting point: the claude_code volume (docker-compose.overlay-feature.yml)
+# mounts over this prefix, so an update outlives the `--rm` container it was installed in.
 ARG CLAUDE_CODE_VERSION=latest
-# The postinstall that fetches the platform-native binary does not always run under a global
-# root install (npm skips scripts in some configurations), leaving a CLI that errors with
-# "claude native binary not installed". Run it explicitly rather than depending on that.
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
-    && node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs" \
-    && npm cache clean --force
+# The package's postinstall puts the platform-native binary in place; without it the CLI errors
+# with "claude native binary not installed". npm 12 blocks install scripts not named in
+# allow-scripts, so allow this one -- as ENV, because the updater's own `npm install -g` needs
+# it as much as this build does.
+ENV NPM_CONFIG_ALLOW_SCRIPTS=@anthropic-ai/claude-code
+RUN NPM_CONFIG_PREFIX=/opt/claude-code npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+    && npm cache clean --force \
+    && chown -R gradle /opt/claude-code
 
 # A headless browser, so the agent can check a page it changed the way a user would see it --
 # JavaScript, rendering, console errors -- rather than stopping at a 200 from curl. Two pieces:
@@ -50,6 +56,11 @@ RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
     && chmod 0755 /usr/local/bin/playwright \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
+
+# Only now, so the Playwright install above landed in /usr and not in the updatable prefix.
+# ENV rather than the profile: it must hold for whatever runs claude, login shell or not.
+ENV NPM_CONFIG_PREFIX=/opt/claude-code
+ENV PATH=/opt/claude-code/bin:${PATH}
 
 # Defaults seeded into ~/.claude on first run. They cannot simply live at ~/.claude/ in the
 # image: the claude_home VOLUME mounts over that path, so anything baked there is hidden.

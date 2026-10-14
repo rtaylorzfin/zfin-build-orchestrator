@@ -81,6 +81,10 @@ services:
       # container can use the token but not rewrite it.
       - claude_home:/home/gradle/.claude
       - ${ZFIN_CLAUDE_TOKEN_FILE:-/dev/null}:/run/secrets/claude-token:ro
+      # The Claude Code install itself (its npm prefix; see compose/claude/Dockerfile), writable
+      # so the CLI's auto-updater works and kept in a volume so an update survives `run --rm`.
+      # Docker seeds the volume from the image on first use; after that the updater owns it.
+      - claude_code:/opt/claude-code
       # Dumps read-only, so `loaddb`/`loadsolr` work. Withholding them would buy nothing -- the
       # sidecar already reaches the live database over the compose network and can read every
       # row. Contrast /mnt/research, deliberately NOT mounted: that one spans other instances
@@ -114,3 +118,9 @@ services:
 
 volumes:
   claude_home:
+  # One install for every stack on this machine, not one per stack: a binary, not state, so
+  # there is nothing to isolate, and each stack would otherwise re-download every update.
+  # Per architecture, since the install holds a native binary. Not in StackConfig.CLAUDE_VOL,
+  # so freeze never archives it; delete it to reset to the image's version.
+  claude_code:
+    name: zfin-claude-code${DOCKER_ARCH:-}

@@ -140,6 +140,10 @@ class StackConfig {
     // The agent's per-stack home, captured whenever it exists so a frozen stack keeps its
     // session history. Absent until the claude sidecar lands; freeze skips what is not there.
     static final String CLAUDE_VOL = 'claude_home'
+    // The Claude Code install, shared by every stack (`name:` in docker-compose.overlay-feature.yml,
+    // plus an arch suffix). Compose labels it with whichever project happened to create it, so
+    // removing THAT feature must not sweep it out from under the rest.
+    static final String CLAUDE_CODE_VOL_PREFIX = 'zfin-claude-code'
 
     // Jenkins' home: jobs, plugins, and secrets/initialAdminPassword -- the credential
     // `jenkins-cli` authenticates with. Captured like CLAUDE_VOL rather than added to APP_VOLS,
