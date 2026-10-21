@@ -66,7 +66,7 @@ autoload -U +X bashcompinit && bashcompinit
 ''' : ''}source "${compl}"
 
 # Shortcuts: main -> worktrees/main, wt [<name>|<ticket#>] -> worktrees/<name> (tab completes),
-# ztree -> the dev tree. They follow the tree you are in${tree ? ", else this one:" : "."}
+# ztree -> the dev tree; zrun/zexec -> z run/z exec. They follow the tree you are in${tree ? ", else this one:" : "."}
 ${initTree}source "${nav}"
 """
     }

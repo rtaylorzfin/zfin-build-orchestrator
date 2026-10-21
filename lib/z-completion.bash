@@ -82,3 +82,12 @@ _z_complete() {
     esac
 }
 complete -F _z_complete z
+
+# zrun / zexec (lib/z-nav.sh) complete as `z run` / `z exec`: splice the subcommand back in.
+_z_shortcut_complete() {
+    local sub="${COMP_WORDS[0]#z}"
+    COMP_WORDS=(z "$sub" "${COMP_WORDS[@]:1}")
+    (( COMP_CWORD++ ))
+    _z_complete
+}
+complete -F _z_shortcut_complete zrun zexec

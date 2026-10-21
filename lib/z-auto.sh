@@ -1,6 +1,7 @@
 # The directory hook `z shell-init --auto` prints (and `--install` writes to ~/.bashrc.d/zfin.sh):
-# `z`, its tab completion and the shortcuts (main, wt, ztree) are on while the working directory
-# is inside a dev tree -- a zfin-dev.env at or above it -- and off again outside every tree.
+# `z`, its tab completion and the shortcuts (main, wt, ztree, zrun, zexec) are on while the
+# working directory is inside a dev tree -- a zfin-dev.env at or above it -- and off again
+# outside every tree.
 # Moving from one tree into another switches to that tree's tooling.
 #
 #   export ZFIN_DEV_ROOT=<tree>    pin one tree: everything stays on, from anywhere, pointed there
@@ -23,8 +24,8 @@ _zfin_auto() {
 
     if [ -n "$_ZFIN_ACTIVE" ]; then             # leaving a tree: take back what entering added
         p=":$PATH:"; p="${p//:$_ZFIN_ACTIVE_HOME:/:}"; p="${p#:}"; PATH="${p%:}"
-        complete -r z wt 2>/dev/null
-        unset -f main wt ztree _zfin_tree _zfin_worktrees _zfin_wt_complete _z_complete _z_features 2>/dev/null
+        complete -r z wt zrun zexec 2>/dev/null
+        unset -f main wt ztree zrun zexec _z_shortcut_complete _zfin_tree _zfin_worktrees _zfin_wt_complete _z_complete _z_features 2>/dev/null
         unset _ZFIN_INIT_TREE _ZFIN_ACTIVE _ZFIN_ACTIVE_HOME
     fi
     [ -n "$tree" ] || return

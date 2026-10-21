@@ -26,7 +26,7 @@ one tree everywhere. `z shell-init --auto` prints the hook, for `eval` or your o
 
 It also defines shortcuts for getting around the tree: `main` goes to `worktrees/main`, `wt`
 to `worktrees/`, `wt <name>` to a worktree (Tab completes it; `wt 12345` means `zfin-12345`),
-and `ztree` to the tree itself. They use the tree you are in, else the one `shell-init` ran in.
+and `ztree` to the tree itself. `zrun` and `zexec` are `z run` and `z exec`. They use the tree you are in, else the one `shell-init` ran in.
 
 | | |
 |---|---|

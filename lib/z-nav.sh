@@ -4,6 +4,7 @@
 #   wt <name>       -> worktrees/<name>; a bare number is a ticket: wt 12345 -> worktrees/zfin-12345
 #   wt <TAB>        -> the worktrees there are
 #   ztree           -> the dev tree itself
+#   zrun, zexec     -> z run, z exec (Tab completes services, as for z)
 #
 # Functions, because only the shell itself can change its directory. Plain shell rather than a
 # call to z, so a keystroke costs no JVM start. They find the tree as z does -- $ZFIN_DEV_ROOT,
@@ -59,3 +60,8 @@ _zfin_wt_complete() {
     COMPREPLY=( $(compgen -W "$(find "$w" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sed 's#.*/##')" -- "$cur") )
 }
 complete -F _zfin_wt_complete wt
+
+# The two commands typed most. Functions rather than aliases: an alias is not expanded in a
+# script or after `command`, and the cd hook (lib/z-auto.sh) can unset a function on the way out.
+zrun()  { z run "$@"; }
+zexec() { z exec "$@"; }
