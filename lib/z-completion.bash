@@ -46,7 +46,7 @@ _z_complete() {
                 esac
             fi ;;
         scaffold)                  COMPREPLY=( $(compgen -W "--root --no-mounts --dry-run" -- "$cur") ) ;;
-        shell-init)                COMPREPLY=( $(compgen -W "bash zsh" -- "$cur") ) ;;
+        shell-init)                COMPREPLY=( $(compgen -W "bash zsh --auto --install" -- "$cur") ) ;;
         cert)                      COMPREPLY=( $(compgen -W "show install" -- "$cur") ) ;;
         proxy)                     COMPREPLY=( $(compgen -W "up down status attach --all" -- "$cur") ) ;;
         env)
