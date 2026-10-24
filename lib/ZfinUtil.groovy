@@ -515,6 +515,29 @@ class ZfinUtil {
         sizes.size() == vols.size() ? sizes : [:]
     }
 
+    /** Bytes in the pg_wal directory of a postgres data volume, or 0 when there is none (or
+     *  it cannot be read). Found rather than assumed: PGDATA's place inside the volume moved
+     *  with the postgres 18 image (18/docker/pg_wal; data/pg_wal before it). */
+    long pgWalBytes(String vol) {
+        def out = captureOutput(['docker', 'run', '--rm', '-u', '0', '--entrypoint', 'sh', '-v', "${vol}:/v:ro",
+                                 tarImage(), '-c', 'd=$(find /v -maxdepth 3 -type d -name pg_wal | head -1); [ -n "$d" ] && du -sk "$d"'])
+        def m = out =~ /^(\d+)/
+        m ? (m[0][1] as long) * 1024L : 0L
+    }
+
+    /** Shed the WAL a cleanly shut-down PGDATA keeps for reuse: `pg_resetwal`, run with the
+     *  stack's own db image (`img`, so the postgres major and platform match the data).
+     *  Everything is already checkpointed into the data files after a clean shutdown, so the
+     *  segments hold nothing; postgres keeps them only to reuse, and they drain only as new WAL
+     *  is written. Deliberately WITHOUT -f: pg_resetwal then refuses a cluster that was not
+     *  shut down cleanly, where resetting would throw away writes. False when it did not run. */
+    boolean trimWal(String vol, String img) {
+        def plat = imagePlatform(img)
+        runCommand(['docker', 'run', '--rm'] + (plat ? ['--platform', plat] : []) +
+                   ['-u', 'postgres', '-v', "${vol}:/var/lib/postgresql", '--entrypoint', 'bash',
+                    img, '-c', 'pg_resetwal "$PGDATA"'], [check: false]) == 0
+    }
+
     /** Does deleting a docker volume give space back to the filesystem holding `dir`? That is
      *  what makes freeze's capture-then-delete pay off: with the archive on the same disk, each
      *  volume freed makes room for the next archive; on another disk (NFS) it makes none.

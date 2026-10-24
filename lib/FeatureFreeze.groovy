@@ -44,6 +44,12 @@
 // every smaller volume has already turned into its (smaller) archive and freed the difference.
 // The peak is then roughly the biggest archive less that difference, not the stack's worth.
 //
+// WAL IS TRIMMED BEFORE pg_data IS CAPTURED. Postgres keeps written WAL for reuse up to
+// max_wal_size -- 10GB in the base compose file -- and a cleanly shut-down cluster needs none
+// of it: measured at 10G of a 25G pg_data on one feature. Archiving it costs space and time
+// for nothing, so freeze runs pg_resetwal after the verified clean shutdown (ZfinUtil.trimWal:
+// without -f, so pg_resetwal itself refuses an unclean cluster), as `z seed new` does.
+//
 // A FREEZE THAT STOPS PART-WAY IS SAFE AND RESUMABLE. The manifest says `state: partial` and
 // lists what is `captured`; every volume is at all times either still in docker or archived
 // and recorded. `z freeze` again picks up where it stopped; `z thaw` restores what was
@@ -197,6 +203,16 @@ class FeatureFreeze {
         // out of space part-way is not a disaster (see the header): it stops, resumably.
         def discard = doCaches ? [] : StackConfig.CACHE_VOLS.findAll { !(it in plan) && exists(it) }
         def sizes = zfinUtil.volumeBytes((pending + discard).collect { volName(it) })
+        // pg_data is sized as it will be captured: less the WAL the trim (step 3a) sheds,
+        // which can be most of the difference between fitting and not.
+        def trimPlanned = !shared && 'pg_data' in pending
+        if (trimPlanned && sizes) {
+            long wal = zfinUtil.pgWalBytes(volName('pg_data'))
+            if (wal > (256L << 20)) {
+                info(String.format("pg_wal   : %.1fG of WAL kept for reuse -- trimmed before capture", wal / 1073741824.0))
+                sizes[volName('pg_data')] = Math.max(0L, (sizes[volName('pg_data')] as long) - wal + (64L << 20))
+            }
+        }
         def sizeOf = { String vn -> (sizes[volName(vn)] ?: 0L) as long }
         // Smallest first (see the header). Without sizes, plan order -- it lists pg_data first,
         // so reverse it to put the biggest last as best we can.
@@ -246,6 +262,7 @@ class FeatureFreeze {
         }
         def stackImages = resume ? ((prior.images ?: [:]) as Map) : [:]
         def platform = resume ? prior.platform : null
+        def uncleanDb = false   // set when --force carried us past an unverified shutdown
         if (containers()) {
             // App + build tier first, and wait for them to actually be gone. compile/claude are
             // outside the depends_on graph on purpose (an edge there would make `z run compile`
@@ -296,6 +313,7 @@ class FeatureFreeze {
                         tail.readLines().each { System.err.println("     $it") }
                         if (!force) die("refusing to archive an unclean database. Investigate, or --force to proceed anyway.")
                         System.err.println("!! --force given; archiving anyway.")
+                        uncleanDb = true
                     }
                 }
                 timer.mark('stop data tier + verify')
@@ -347,6 +365,17 @@ class FeatureFreeze {
         if (discard) {
             info("dropping the build caches to make room (${discard.join(', ')}; thaw re-warms them from the seed)")
             discard.each { runQuietly(['docker', 'volume', 'rm', volName(it)]) }
+        }
+
+        // ---- 3a. trim pg_data's WAL (see the header) ------------------------------------------
+        // Not after --force past an unclean shutdown: pg_resetwal would refuse anyway, and the
+        // archive should then be exactly what postgres left, for crash recovery at thaw.
+        if (trimPlanned && !uncleanDb) {
+            def dbImg = (stackImages.db?.image ?: zfinUtil.dbImage()) as String
+            info("trimming pg_data's WAL (pg_resetwal on the cleanly shut-down cluster)")
+            if (!zfinUtil.trimWal(volName('pg_data'), dbImg))
+                System.err.println("!! pg_resetwal declined (above) -- archiving pg_data with its WAL as it is.")
+            timer.mark('trim WAL')
         }
 
         // ---- 4. manifest, before the first volume goes ------------------------------------
