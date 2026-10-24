@@ -17,7 +17,7 @@ _z_complete() {
     local cur sub argstart=2
     cur="${COMP_WORDS[COMP_CWORD]}"
     if (( COMP_CWORD == 1 )); then
-        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status freeze thaw build feature seed shared scaffold fresh-install shell-init env config cert proxy help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status freeze thaw resetwal build feature seed shared scaffold fresh-install shell-init env config cert proxy help" -- "$cur") )
         return
     fi
     sub="${COMP_WORDS[1]}"
@@ -29,6 +29,7 @@ _z_complete() {
         status)                    COMPREPLY=( $(compgen -W "-v --verbose" -- "$cur") ) ;;
         freeze)                    COMPREPLY=( $(compgen -W "$(_z_features) --caches --compress --no-compress --to --force" -- "$cur") ) ;;
         thaw)                      COMPREPLY=( $(compgen -W "$(_z_features) --from --no-up --no-caches --force" -- "$cur") ) ;;
+        resetwal)                  COMPREPLY=( $(compgen -W "$(_z_features) -y --yes" -- "$cur") ) ;;
         down)                      COMPREPLY=( $(compgen -W "$services -v" -- "$cur") ) ;;
         build)                     COMPREPLY=( $(compgen -W "configure load-db load-solr deploy-jenkins deploy all --build --pull-missing --test" -- "$cur") ) ;;
         shared)                    COMPREPLY=( $(compgen -W "up down status freeze thaw --tag --rm-data --stop-sharers --compress --no-compress --to --from" -- "$cur") ) ;;

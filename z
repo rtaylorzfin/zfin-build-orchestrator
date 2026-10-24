@@ -68,6 +68,9 @@ Stack ops (act on the stack that owns the working directory):
   z restart [svc...]    restart service(s)
   z status [-v]         the active stack: url, dir, branch, links, what is running
                         (-v adds ports, compose/env files, and the container table)
+  z resetwal [<container>|<ticket>] [-y]
+                        shed postgres' kept WAL: stop the db, pg_resetwal, start it
+                        (asks first; default: this stack's db)
 
 Feature ops:
   z feature new [<ticket>] [opts]   provision a feature stack (prompts for the plan; -y
@@ -148,6 +151,9 @@ switch (cmd) {
     case 'config':        runCmd('Config', rest); break
     case 'cert':          runCmd('Cert', rest); break
     case 'proxy':         runCmd('ProxyStack', rest); break
+    // Resolves its own target (a container, a ticket, or the stack you stand in), so no
+    // resolveStack: a container argument must not be overridden by the cwd's stack.
+    case 'resetwal':      runCmd('ResetWal', rest); break
 
     // feature ops
     case 'feature':

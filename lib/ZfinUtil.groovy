@@ -532,10 +532,26 @@ class ZfinUtil {
      *  is written. Deliberately WITHOUT -f: pg_resetwal then refuses a cluster that was not
      *  shut down cleanly, where resetting would throw away writes. False when it did not run. */
     boolean trimWal(String vol, String img) {
+        resetWal(['-v', "${vol}:/var/lib/postgresql".toString()], img)
+    }
+
+    /** trimWal's mechanism, for any way of reaching a PGDATA: `mounts` are the docker run args
+     *  that put it in place (`--volumes-from <container>` for `z resetwal`, plus `-e PGDATA=` when
+     *  that container set its own). `sh`, not bash: not every postgres image has bash. */
+    boolean resetWal(List mounts, String img) {
         def plat = imagePlatform(img)
         runCommand(['docker', 'run', '--rm'] + (plat ? ['--platform', plat] : []) +
-                   ['-u', 'postgres', '-v', "${vol}:/var/lib/postgresql", '--entrypoint', 'bash',
+                   ['-u', 'postgres'] + mounts + ['--entrypoint', 'sh',
                     img, '-c', 'pg_resetwal "$PGDATA"'], [check: false]) == 0
+    }
+
+    /** Bytes in pg_wal under PGDATA, reached as resetWal reaches it; works on a running or a
+     *  stopped container. -1 when it cannot be read. */
+    long pgWalBytesVia(List mounts, String img) {
+        def out = captureOutput(['docker', 'run', '--rm', '-u', '0'] + mounts +
+                                ['--entrypoint', 'sh', img, '-c', 'du -sk "$PGDATA/pg_wal"'])
+        def m = out =~ /^(\d+)/
+        m ? (m[0][1] as long) * 1024L : -1L
     }
 
     /** Does deleting a docker volume give space back to the filesystem holding `dir`? That is

@@ -111,6 +111,13 @@ archive. It checks free space before it stops anything. A freeze that runs out o
 interrupted stops in a safe state that `z feature ls` shows as `freezing`: run `z freeze` to
 finish it or `z thaw` to back out (`z up` refuses until you do one or the other).
 
+Postgres keeps written WAL for reuse up to `max_wal_size`. Feature stacks cap that at 1GB
+(`DOCKER_DB_MAX_WAL_SIZE` in a stack's .env overrides it); the base file's 10GB is for
+instances. To shed WAL a database is already holding, `z resetwal` stops it, runs
+`pg_resetwal` (which refuses unless the shutdown was clean) and starts it again. It acts on this
+stack's db by default, or on a named feature or any postgres container, such as the shared one.
+It warns and asks before doing anything; `-y` skips the question.
+
 ---
 
 ## The pieces
