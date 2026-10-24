@@ -18,6 +18,20 @@ services:
     environment:
       VIRTUAL_HOST: ""
       LETSENCRYPT_HOST: ""
+  # max_wal_size: the base file runs postgres with 10GB -- headroom for an instance's bulk
+  # loads, and postgres keeps that much WAL around once it has written it (recycled segments
+  # only drain as new WAL is written). A feature stack does not bulk-load, and 10GB of idle WAL
+  # was ~40% of one feature's pg_data. 1GB is postgres' own default.
+  # Appended AFTER the base file's flags rather than restating them: postgres takes the last
+  # -c for a setting, and restating `command` here would apply one copy of it to every
+  # feature, whichever branch its base file came from. "$$@" is that base command.
+  # DOCKER_DB_MAX_WAL_SIZE in the stack's .env overrides it (z seed new sets 10GB: it loads).
+  db:
+    entrypoint:
+      - sh
+      - -c
+      - exec docker-entrypoint.sh "$$@" -c max_wal_size=${DOCKER_DB_MAX_WAL_SIZE:-1GB}
+      - docker-entrypoint.sh
   # certbot asks for a real certificate for the stack's hostname. A feature stack's name is not
   # publicly resolvable, so it fails on every `up` and reads as a failure in `docker ps -a`; an
   # outside proxy with acme-companion issues certificates itself if it can. Nothing depends on it.
