@@ -12,6 +12,11 @@
 // weeks or months later, and an archive whose volumes are partly missing -- restoring 3 of 4
 // -- gives a stack that starts and is subtly broken, which is worse than one that does not
 // start. So is a pg_data written on another architecture, which is refused the same way.
+//
+// A FREEZE THAT STOPPED PART-WAY (manifest state `partial`) thaws too: that is how you back
+// out of one. Only the volumes it `captured` were removed, so only those are restored; the
+// rest never left docker. Afterwards the manifest is marked `abandoned`, so a later
+// `z freeze` treats it as an old archive to overwrite rather than a freeze to resume.
 class FeatureThaw {
     def run(List args, ZfinUtil zfinUtil) {
         if (zfinUtil.helpRequested(args, this)) return
@@ -53,8 +58,10 @@ class FeatureThaw {
         def envF = new File(wt, 'docker/.env')
         def spec = zfinUtil.stackSpec(wt)
 
+        def partial = m.state == 'partial'
         def timer = zfinUtil.stepTimer()
-        info("thaw '$slug'  project=$project  frozen ${m.frozenAt}  data=${m.data}")
+        info("thaw '$slug'  project=$project  " +
+             (partial ? "freeze started ${m.startedAt} and did not finish" : "frozen ${m.frozenAt}") + "  data=${m.data}")
         if (m.branch) info("branch   : ${m.branch}${m.commit ? " @ ${m.commit.take(10)}" : ''}")
 
         if (!wt.isDirectory())
@@ -68,6 +75,23 @@ class FeatureThaw {
 
         // 1. Every volume the manifest claims must actually be here.
         def vols = (m.volumes ?: []) as List
+        // A partial freeze removed only what it captured; the rest must still be in docker, or
+        // the stack comes back missing a volume nobody has a copy of.
+        def stillLive = []
+        if (partial) {
+            def captured = (m.captured ?: []) as List
+            stillLive = vols - captured
+            def gone = stillLive.findAll { !zfinUtil.volumeExists("${project}_$it") }
+            if (gone) problems << "never archived, yet no longer in docker: ${gone.join(', ')}"
+            // Archived and still (or again) present: left alone if older than the freeze (it
+            // stopped before removing it), refused if newer -- an empty recreation would
+            // otherwise stand in for the archived data.
+            def again = zfinUtil.volumesCreatedSince(project, captured, (m.startedAtMs ?: 0L) as long)
+            if (again) problems << "archived, then created again since the freeze (likely empty): ${again.join(', ')}" +
+                                   " -- docker volume rm them first"
+            vols = captured.findAll { !zfinUtil.volumeExists("${project}_$it") }
+            info("partial freeze: restoring the ${vols.size()} volume(s) it removed; ${captured.size() - vols.size() + stillLive.size()} never left docker")
+        }
         // Either form: uncompressed `<vn>.tar` or gzipped `<vn>.tgz` (see freeze's --compress).
         def missing = vols.findAll { !zfinUtil.archiveFileFor(src, it) }
         if (missing) problems << "archive is missing tarballs for: ${missing.join(', ')}"
@@ -117,7 +141,12 @@ class FeatureThaw {
                             failed.collect { it.err }.join('\n'))
             restored = results
         } else {
-            info("no volumes in the archive (shared-db stack) -- nothing to restore")
+            info(partial ? "nothing to restore -- every volume is still in docker"
+                         : "no volumes in the archive (shared-db stack) -- nothing to restore")
+        }
+        if (partial) {
+            m.state = 'abandoned'
+            zfinUtil.writeJsonAtomic(manifestFile, m as Map)
         }
         timer.mark('restore volumes')
 

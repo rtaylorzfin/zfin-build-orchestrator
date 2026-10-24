@@ -57,7 +57,9 @@ def helpers = ['runCommand', 'runQuietly', 'captureOutput', 'captureOutputMerged
                'hasPigz', 'featureSlugFromCwd', 'sharedProject',
                'archiveClaudeSession', 'helpRequested', 'newestDbDump', 'solrSnapshots',
                'stackInstance', 'writeStackEnv', 'sweepProjectVolumes', 'reclaimOwnership',
-               'cacheDir', 'envPath', 'prepareCacheVolumes', 'dataPlatform', 'dbImage'] as Set
+               'cacheDir', 'envPath', 'prepareCacheVolumes', 'dataPlatform', 'dbImage',
+               'verifyArchive', 'volumeBytes', 'volumesShareDiskWith', 'writeJsonAtomic',
+               'freezeBlocksUp', 'volumesCreatedSince'] as Set
 
 println "\nunqualified helper calls:"
 lib.listFiles().findAll { it.name.endsWith('.groovy') && !(it.name in ['ZfinUtil.groovy', 'StackConfig.groovy']) }

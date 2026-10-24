@@ -91,8 +91,17 @@ class StackOps {
             zfinUtil.info("created an empty token file at $f -- run `claude setup-token` on the HOST and save it there")
         }
 
+        // `up` and `run` create whatever volumes are missing -- on a frozen stack, empty ones in
+        // place of the archived data (see ZfinUtil.freezeBlocksUp). exec needs a running
+        // container, so it cannot get that far.
+        def refuseIfFrozen = {
+            def why = zfinUtil.freezeBlocksUp(zfinUtil.stackVar('COMPOSE_PROJECT_NAME'))
+            if (why) die(why)
+        }
+
         def runExec = { boolean isExec, List a ->
             requireStack()
+            if (!isExec) refuseIfFrozen()
             def (svc, da, ba) = parseSvc(a)
             if (svc == StackConfig.CLAUDE_SERVICE) prepareClaudeToken()
             if (isExec) compose(['exec'] + (System.console() ? [] : ['-T']) + da + [svc, 'bash', '-l'] + ba)
@@ -116,6 +125,7 @@ class StackOps {
             case 'exec':    runExec(true, rest); break
             case 'up':
                 requireStack()
+                refuseIfFrozen()
                 checkServices(rest)
                 // A --shared-db stack keeps its app tier single-homed and reaches shared data
                 // by connecting the shared db/solr into this feature's network -- so up must

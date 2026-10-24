@@ -105,6 +105,12 @@ To reclaim a stack's disk without losing it, `z feature freeze` archives its vol
 `z feature thaw` restores them — the same capture and restore code the seed uses. Inside a
 feature worktree, `z freeze` / `z thaw` do the same for that feature.
 
+Freeze works one volume at a time, smallest first: capture, read back, record, remove. So it
+never needs the whole stack and the whole archive on disk at once, only about the largest
+archive. It checks free space before it stops anything. A freeze that runs out of space or is
+interrupted stops in a safe state that `z feature ls` shows as `freezing`: run `z freeze` to
+finish it or `z thaw` to back out (`z up` refuses until you do one or the other).
+
 ---
 
 ## The pieces

@@ -463,7 +463,9 @@ class ZfinUtil {
         pigzAvailable
     }
 
-    void captureVolume(String vol, File out, boolean compress = true) {
+    /** Returns tar's exit code. `check` false is for a caller that must clean up after a
+     *  failed capture (freeze's partial archive) rather than have z exit underneath it. */
+    int captureVolume(String vol, File out, boolean compress = true, boolean check = true) {
         out.parentFile.mkdirs()
         def compressor = compress ? (hasPigz() ? 'pigz' : 'gzip') : null
         info("capturing $vol -> $out${compress ? " ($compressor -1)" : ' (uncompressed)'}")
@@ -481,7 +483,100 @@ class ZfinUtil {
         runCommand(['docker', 'run', '--rm', '-u', '0', '--entrypoint', 'tar',
                     '-v', "${vol}:/data:ro",
                     '-v', "${out.parentFile.absolutePath}:/out",
-                    tarImage()] + tarArgs + ["/out/${out.name}", '-C', '/data', '.'])
+                    tarImage()] + tarArgs + ["/out/${out.name}", '-C', '/data', '.'], [check: check])
+    }
+
+    /** Read an archive back end to end: true when tar can list all of it. The check freeze
+     *  makes before it deletes the volume an archive was taken from -- tar exiting 0 on the
+     *  write is good evidence, but once the source is gone the archive is the only copy, so
+     *  it is read back rather than trusted. Gzipped when named .tgz. */
+    boolean verifyArchive(File f) {
+        def gz = f.name.endsWith('.tgz')
+        def unzip = gz ? ['-I', hasPigz() ? 'pigz' : 'gzip'] : []
+        runQuietly(['docker', 'run', '--rm', '-u', '0', '--entrypoint', 'tar',
+                    '-v', "${f.parentFile.absolutePath}:/in:ro", tarImage()] +
+                   unzip + ['-tf', "/in/${f.name}"]) == 0
+    }
+
+    /** Disk used by each named volume, in bytes: one container, `du -sk` over all of them.
+     *  `docker system df -v` would answer too, but it sizes EVERY volume on the host (10s here)
+     *  and prints human units. Empty map when the probe fails -- callers treat sizes as advice. */
+    Map<String, Long> volumeBytes(List<String> vols) {
+        if (!vols) return [:]
+        def mounts = []
+        vols.eachWithIndex { v, i -> mounts += ['-v', "${v}:/v/${i}:ro".toString()] }
+        def out = captureOutput(['docker', 'run', '--rm', '-u', '0', '--entrypoint', 'du'] + mounts +
+                                [tarImage(), '-sk'] + (0..<vols.size()).collect { "/v/$it".toString() })
+        def sizes = [:]
+        out.readLines().each { line ->
+            def m = line =~ /^(\d+)\s+\/v\/(\d+)$/
+            if (m) sizes[vols[m[0][2] as int]] = (m[0][1] as long) * 1024L
+        }
+        sizes.size() == vols.size() ? sizes : [:]
+    }
+
+    /** Does deleting a docker volume give space back to the filesystem holding `dir`? That is
+     *  what makes freeze's capture-then-delete pay off: with the archive on the same disk, each
+     *  volume freed makes room for the next archive; on another disk (NFS) it makes none.
+     *  Docker Desktop keeps volumes in a VM disk image under ~/Library/Containers -- which it
+     *  does shrink promptly after `docker volume rm` (measured: 3G back in ~5s) -- so that is
+     *  the path compared there. Null when it cannot tell. */
+    Boolean volumesShareDiskWith(File dir) {
+        try {
+            def info = captureOutput(['docker', 'info', '--format', '{{.OperatingSystem}}|{{.DockerRootDir}}'])
+            if (!info) return null
+            def (os, root) = info.split('\\|', 2) as List
+            def home = System.getProperty('user.home')
+            def probe = os.contains('Docker Desktop')
+                    ? ([new File(home, 'Library/Containers/com.docker.docker'), new File(home)].find { it.exists() })
+                    : new File(root)
+            while (probe && !probe.exists()) probe = probe.parentFile
+            def d = dir; while (d && !d.exists()) d = d.parentFile
+            if (!probe || !d) return null
+            java.nio.file.Files.getFileStore(probe.toPath()) == java.nio.file.Files.getFileStore(d.toPath())
+        } catch (Exception ignored) { null }
+    }
+
+    /** Which of `vns` exist as `<project>_<vn>` AND were created after `sinceMs` (or whose
+     *  creation time cannot be read). For a freeze that stopped part-way: a volume it archived
+     *  that is back, and newer than the freeze, is a recreation -- likely empty -- not the data. */
+    List<String> volumesCreatedSince(String project, List<String> vns, long sinceMs) {
+        vns.findAll { vn ->
+            def vol = "${project}_${vn}".toString()
+            if (!volumeExists(vol)) return false
+            def at = captureOutput(['docker', 'volume', 'inspect', vol, '--format', '{{.CreatedAt}}'])
+            try { java.time.OffsetDateTime.parse(at).toInstant().toEpochMilli() > sinceMs }
+            catch (Exception ignored) { true }
+        }
+    }
+
+    /** Write a JSON document beside and rename it over, so an interrupted write cannot leave a
+     *  manifest that is half a JSON document. */
+    void writeJsonAtomic(File f, Map doc) {
+        def tmp = new File(f.parentFile, f.name + '.part')
+        tmp.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(doc))
+        java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    /** Why `z up` must not start this stack, or null. A frozen stack's volumes are gone, so up
+     *  would create EMPTY ones -- and for a stack whose freeze did not finish, a later
+     *  `z freeze` resuming it would then archive those empty volumes over the real data.
+     *  Frozen = the manifest's volumes are all missing; mid-freeze = state 'partial'. */
+    String freezeBlocksUp(String project) {
+        if (!project) return null
+        def slug = project.toLowerCase()
+        def mf = new File(new File(archiveDir(false), slug), StackConfig.FREEZE_MANIFEST)
+        if (!mf.isFile()) return null
+        def m
+        try { m = new groovy.json.JsonSlurper().parse(mf) } catch (Exception ignored) { return null }
+        def vols = ((m.volumes ?: []) as List)
+        if (m.state == 'partial')
+            return "'$slug' is part-way through a freeze (${(m.captured ?: []).size()} of ${vols.size()} volumes archived and removed).\n" +
+                   "   z freeze   to finish it, or   z thaw   to restore what it archived."
+        if (vols && m.state != 'abandoned' && vols.every { !volumeExists("${project}_$it") })
+            return "'$slug' is frozen (since ${m.frozenAt}): its volumes are in $mf.parentFile, and up would start it empty.\n" +
+                   "   z thaw   to bring it back (or remove that archive if you really want an empty stack)."
+        null
     }
 
     /** The archive file for a volume in `dir`, whichever form it was written in: uncompressed
@@ -621,12 +716,20 @@ class ZfinUtil {
               data    : spec?.data ?: 'own',
               state   : servingProjects.contains(proj) ? 'up'
                         : running.contains(proj) ? 'partial'
-                        : (!anyContainers.contains(proj) &&
-                           new File(new File(archiveRoot, wt.name),
-                                    StackConfig.FREEZE_MANIFEST).isFile() ? 'frozen' : 'down'),
+                        : !anyContainers.contains(proj) ? frozenState(new File(new File(archiveRoot, wt.name),
+                                                                     StackConfig.FREEZE_MANIFEST))
+                        : 'down',
               url     : stackUrls(envF).primary ?: '',
               spec    : spec ]
         }
+    }
+
+    /** No containers: 'frozen' with a freeze manifest, 'freezing' when that freeze stopped
+     *  part-way (z freeze resumes it), else 'down'. */
+    private String frozenState(File manifest) {
+        if (!manifest.isFile()) return 'down'
+        try { new groovy.json.JsonSlurper().parse(manifest).state == 'partial' ? 'freezing' : 'frozen' }
+        catch (Exception ignored) { 'frozen' }
     }
 
     /** Which Compose project provides the shared db+solr that `--shared-db` stacks attach to.
