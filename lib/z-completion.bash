@@ -2,6 +2,7 @@
 #   z <TAB>          -> subcommands           z build <TAB>   -> phases
 #   z run <TAB>      -> services              z feature <TAB> -> new | ls | rm | refresh | ...
 #   z feature rm|freeze|thaw|refresh <TAB>   -> feature names (the worktrees, less main)
+#   z freeze|thaw <TAB>                      -> the same (top-level aliases)
 # Feature names for `z feature rm <TAB>` and friends: the worktrees there are, less `main`.
 # Read off the directory, as `wt <TAB>` does (lib/z-nav.sh, which shell-init sources too),
 # rather than from `z feature ls` -- a keystroke should not cost a JVM start and a docker call.
@@ -16,7 +17,7 @@ _z_complete() {
     local cur sub argstart=2
     cur="${COMP_WORDS[COMP_CWORD]}"
     if (( COMP_CWORD == 1 )); then
-        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status build feature seed shared scaffold fresh-install shell-init env config cert proxy help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status freeze thaw build feature seed shared scaffold fresh-install shell-init env config cert proxy help" -- "$cur") )
         return
     fi
     sub="${COMP_WORDS[1]}"
@@ -26,6 +27,8 @@ _z_complete() {
         run|exec)                  COMPREPLY=( $(compgen -W "$services -u" -- "$cur") ) ;;
         up|stop|pull|log|restart)  COMPREPLY=( $(compgen -W "$services" -- "$cur") ) ;;
         status)                    COMPREPLY=( $(compgen -W "-v --verbose" -- "$cur") ) ;;
+        freeze)                    COMPREPLY=( $(compgen -W "$(_z_features) --caches --compress --no-compress --to --force" -- "$cur") ) ;;
+        thaw)                      COMPREPLY=( $(compgen -W "$(_z_features) --from --no-up --no-caches --force" -- "$cur") ) ;;
         down)                      COMPREPLY=( $(compgen -W "$services -v" -- "$cur") ) ;;
         build)                     COMPREPLY=( $(compgen -W "configure load-db load-solr deploy-jenkins deploy all --build --pull-missing --test" -- "$cur") ) ;;
         shared)                    COMPREPLY=( $(compgen -W "up down status freeze thaw --tag --rm-data --stop-sharers --compress --no-compress --to --from" -- "$cur") ) ;;

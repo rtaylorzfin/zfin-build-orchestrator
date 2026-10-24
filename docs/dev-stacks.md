@@ -102,7 +102,8 @@ host took a snapshot from 32.6G to 19.7G. The reclaimed space was retained WAL: 
 frozen snapshot, having overshot `max_wal_size` during the load.
 
 To reclaim a stack's disk without losing it, `z feature freeze` archives its volumes and
-`z feature thaw` restores them — the same capture and restore code the seed uses.
+`z feature thaw` restores them — the same capture and restore code the seed uses. Inside a
+feature worktree, `z freeze` / `z thaw` do the same for that feature.
 
 ---
 

@@ -11,6 +11,7 @@
 //
 //   stack ops (target from cwd):        run exec up down pull log restart status  -> StackOps
 //   feature ops:                       feature new|ls|rm|refresh|freeze|thaw|session
+//                                      (freeze/thaw also top-level: `z freeze` in a worktree)
 //   seeds (host-wide, not per ticket): seed new|restore|add-volumes|verify|ls|rm
 //   host-wide stacks (own project):    shared (db+solr)
 //   CI / bootstrap:                    build fresh-install scaffold
@@ -76,6 +77,7 @@ Feature ops:
   z feature refresh <t>|--all       backfill .env keys a stack was made too early to have
   z feature freeze <ticket> [opts]  park it: archive its volumes, down -v, keep the worktree
   z feature thaw <ticket> [opts]    bring a frozen stack back exactly as it was
+  z freeze / z thaw [opts]          the same, for the feature worktree you are standing in
   z feature session export|ls       archive the sidecar's session history (outlives `rm`)
 
 CI / bootstrap (no activation needed):
@@ -180,6 +182,10 @@ Flags for a subcommand:  z feature <sub> --help   (e.g. z feature new --help)'''
             default: zfinUtil.die("z feature: unknown '$fsub' (new|ls|rm|refresh|freeze|thaw|session)", 2)
         }
         break
+    // Shorthand for the feature you stand in: both already infer the ticket from the
+    // worktree (featureSlugFromCwd), so these are plain aliases -- a ticket still works.
+    case 'freeze':        runCmd('FeatureFreeze', rest); break
+    case 'thaw':          runCmd('FeatureThaw', rest); break
 
     // stack lifecycle -> StackOps (op is args[0]). These are the commands that need a TARGET,
     // so they're the ones that get auto-detection: resolveStack asks git for this checkout's
