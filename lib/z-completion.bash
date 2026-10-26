@@ -48,16 +48,15 @@ _z_complete() {
         shared)                    COMPREPLY=( $(compgen -W "up down status freeze thaw --tag --rm-data --stop-sharers --compress --no-compress --to --from" -- "$cur") ) ;;
         seed)
             if (( COMP_CWORD == argstart )); then
-                COMPREPLY=( $(compgen -W "new from-freeze push pull restore add-volumes verify ls rm" -- "$cur") )
+                COMPREPLY=( $(compgen -W "new push pull restore add-volumes verify ls rm" -- "$cur") )
             else
                 case "${COMP_WORDS[argstart]}" in
                     new|build)   if [[ " ${COMP_WORDS[*]} " == *" --from "* ]]; then
-                                     COMPREPLY=( $(compgen -W "--tag --no-app --caches --base-branch" -- "$cur") )
+                                     COMPREPLY=( $(compgen -W "--tag --no-app --caches --base-branch --with-shared --stop-sharers --copy" -- "$cur") )
                                  else
                                      COMPREPLY=( $(compgen -W "--from --db --solr --tag --ref --base-branch --db-platform --caches --build --pull --keep --tmux --resume --clean" -- "$cur") )
                                  fi ;;
                     create)      COMPREPLY=( $(compgen -W "--from --tag --no-app --caches" -- "$cur") ) ;;
-                    from-freeze) COMPREPLY=( $(compgen -W "$(_z_features) --tag --base-branch --copy" -- "$cur") ) ;;
                     push|pull)   COMPREPLY=( $(compgen -W "$(_z_seeds) --remote-dir --force" -- "$cur") ) ;;
                     restore)     COMPREPLY=( $(compgen -W "--app --caches --force" -- "$cur") ) ;;
                     rm)          COMPREPLY=( $(compgen -W "--force" -- "$cur") ) ;;

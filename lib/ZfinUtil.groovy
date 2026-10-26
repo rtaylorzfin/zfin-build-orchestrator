@@ -796,6 +796,35 @@ class ZfinUtil {
         !volumeExists("${project}_pg_data")
     }
 
+    /** Running stacks using the shared data stack `sp`: those whose `<project>_default` network
+     *  its db is connected into (how a --shared-db feature reaches it) and that have a container
+     *  up. The ones a stop of the shared db would cut off mid-flight. */
+    List<String> sharedDbUsers(String sp) {
+        def cid = captureOutput(['docker', 'ps', '-q', '--filter', "label=com.docker.compose.project=$sp",
+                                 '--filter', 'label=com.docker.compose.service=db'])
+        if (!cid) return []
+        def running = captureOutput(['docker', 'ps', '--format', '{{.Label "com.docker.compose.project"}}'])
+                .readLines().findAll { it } as Set
+        captureOutput(['docker', 'inspect', cid, '--format', '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'])
+                .split().findAll { it.endsWith('_default') }*.replaceFirst(/_default$/, '')
+                .findAll { it in running }.sort()
+    }
+
+    /** Consent to stop the shared db+solr for a capture while `busy` stacks use them: asked on a
+     *  terminal, or given up front with --stop-sharers (the flag `z shared freeze` uses); dies
+     *  otherwise. Nothing to ask when nobody is using them. */
+    void confirmStopShared(String sp, List<String> busy, boolean authorised) {
+        if (!busy || authorised) return
+        def con = System.console()
+        if (!con) die("running stacks use the shared db ('$sp'): ${busy.join(', ')}. The capture stops it for a few\n" +
+                      "   minutes and their connection pools break. Authorise it:  --stop-sharers")
+        println "Running stacks on the shared db ('$sp'): ${busy.join(', ')}"
+        println "  It stops for the capture (minutes) and their tomcats lose their connections;"
+        println "  afterwards, `z restart tomcat` in each if it does not recover."
+        def a = con.readLine("Stop the shared db+solr for the capture? [y/N]: ")?.trim()?.toLowerCase()
+        if (!a?.startsWith('y')) die("aborted.", 0)
+    }
+
     /** How to install a tool. Names BOTH platforms rather than detecting one: whoever reads
      *  this is often setting up a different machine from the one that printed it. Deliberately
      *  vague about the Linux package manager rather than guessing between apt/dnf/yum. */

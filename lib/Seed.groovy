@@ -4,9 +4,8 @@
 //   z seed new [--db DUMP] [--solr SNAPSHOT] [--tag TAG] ...   build one from the dumps
 //                                                             (see z seed new --help)
 //   z seed new --from PROJECT [--tag TAG] [--no-app] [--caches] [--base-branch B]
-//                                                             copy a stack that is already loaded
-//   z seed from-freeze [<ticket>] [--tag TAG] [--base-branch B] [--copy]
-//                                                             make a seed of a frozen feature
+//                             [--with-shared] [--stop-sharers] [--copy]
+//                                                             copy a stack, live or frozen
 //   z seed push <tag> <host> / z seed pull <host> <tag>     copy a seed between hosts (rsync
 //                                                             over ssh; see z seed push --help)
 //   z seed ls
@@ -38,9 +37,10 @@
 //
 //   new              One verb, like `z feature new`; where the data comes from picks the how.
 //                    Without --from: load the dumps in a throwaway stack, deploy, capture it
-//                    and tear it down (SeedBuild). With --from: capture that stack's volumes as
-//                    they are. `create` (= new --from, defaulting to the stack you stand in) and
-//                    `build` (= new) still work.
+//                    and tear it down (SeedBuild). With --from: copy that stack, whichever state
+//                    it is in -- see LIVE OR FROZEN below. `create` (= new --from, defaulting to
+//                    the stack you stand in), `build` (= new) and `from-freeze` (= new --from
+//                    <ticket>) still work.
 //
 //   --from PROJECT   Compose project (or feature ticket) to copy. Named, never guessed from the
 //                    working directory: the stack you stand in is often not the loaded one.
@@ -49,19 +49,30 @@
 //                    every feature comes up cold, so they are captured by DEFAULT.
 //   --caches         Also capture gradle/maven/npm. Several GB, and regenerable, so OFF by
 //                    default -- worth it on a host that makes many stacks.
+//   --with-shared    For a --shared-db feature, which has no db or solr of its own: put a copy of
+//                    the shared stack's in the seed, as its own (see below). Without it, on a
+//                    terminal, it asks.
+//   --stop-sharers   Leave to stop a LIVE shared db+solr while other stacks run on it (the
+//                    feature itself counts). Without it, on a terminal, it asks.
+//   --copy           Copy archived tarballs rather than hard-linking them (frozen sources).
 //   --base-branch B  The branch whose schema and data the seed holds, recorded as base_branch.
 //                    Default: the branch the source stack's checkout has checked out.
 //                    `z feature new` notes when a new feature's branch and base both differ.
 //
-//   from-freeze      Turn a feature's freeze archive into a seed, without thawing it: the
-//                    archive already IS a seed's shape (one tarball per volume, captured by the
-//                    same captureVolume), so the tarballs are HARD-LINKED into the seed -- instant,
-//                    and no extra disk -- and only seed.json is new. Thawing or removing the
-//                    feature later deletes its own links and leaves the seed's intact. --copy
-//                    copies instead; so does an archive on another filesystem than the seeds.
-//                    The freeze must be complete and must hold its own db+solr (not --shared-db).
-//                    Default tag: <ticket>-YYYY-MM-DD; default base_branch: the feature's branch.
-//                    The seed carries THAT FEATURE's data -- its schema changes, its test rows.
+//   LIVE OR FROZEN. --from looks at the stack and takes each part from where it is:
+//     live volumes      stopped (db+solr), WAL trimmed, captured, started again
+//     frozen stack      its freeze archive already IS a seed's shape -- one tarball per volume,
+//                       from the same captureVolume -- so the tarballs are HARD-LINKED into the
+//                       seed: instant, no extra disk, only seed.json is new. Thawing or removing
+//                       the stack later drops its own links, not the seed's. --copy copies
+//                       (and so does an archive on another filesystem from the seeds).
+//   A --shared-db feature's db+solr are the shared stack's, taken the same way: linked from its
+//   archive when it is frozen, else captured live -- which stops them under every stack running
+//   on them, hence the questions. Any mix works: a frozen feature on a live shared stack, a live
+//   one on a frozen shared stack. Shared data is as it is NOW (or as of the shared freeze), with
+//   every sharer's writes in it. built_from.shared_data in seed.json records which.
+//   A frozen stack's seed carries THAT stack's data -- its schema changes, its test rows -- and
+//   its base_branch defaults to the frozen branch.
 //
 // WHAT A SEED IS. A directory of per-volume tarballs plus a manifest, at
 // $ZFIN_SEEDS_DIR/<tag>/. `z feature new --seed <tag>` restores it into a new stack.
@@ -111,8 +122,13 @@ class Seed {
             case 'restore': restore(rest, zfinUtil); break
             case 'add-volumes': addVolumes(rest, zfinUtil); break
             case 'verify': verify(rest, zfinUtil); break
-            case 'from-freeze': fromFreeze(rest, zfinUtil); break
-            default: die("z seed: unknown '${sub}' (new|from-freeze|push|pull|restore|add-volumes|verify|ls|rm). See z seed --help.", 2)
+            case 'from-freeze':
+                // The old spelling: --from now takes a frozen stack as readily as a live one.
+                def tk = rest.find { !it.startsWith('-') && !(rest.indexOf(it) > 0 && rest[rest.indexOf(it) - 1] in ['--tag', '--base-branch']) }
+                tk = tk ?: zfinUtil.featureSlugFromCwd()
+                System.err.println(">> (z seed $sub is now z seed new --from <ticket>: it takes frozen stacks too)")
+                create((tk ? ['--from', tk] : []) + (rest - [tk]), zfinUtil); break
+            default: die("z seed: unknown '${sub}' (new|push|pull|restore|add-volumes|verify|ls|rm). See z seed --help.", 2)
         }
     }
 
@@ -128,27 +144,36 @@ class Seed {
         def dir = zfinUtil.seedsDir()
         if (!dir.isDirectory()) { zfinUtil.info("no seeds yet ($dir)"); return }
         def all = (dir.listFiles() ?: []).findAll { it.isDirectory() }
-        // .incoming-<tag>: a seed still arriving (pull, push, from-freeze), or one whose
+        // .incoming-<tag>: a seed still arriving (pull, push, a frozen --from), or one whose
         // transfer stopped. Not a seed yet, so not listed as one.
         def incoming = all.findAll { it.name.startsWith(INCOMING) }*.name*.substring(INCOMING.size()).sort()
-        def seeds = all.findAll { !it.name.startsWith('.') }.sort { it.name }
-        if (!seeds) zfinUtil.info("no seeds yet ($dir)")
-        else {
-            def ms = seeds.collectEntries { [it.name, zfinUtil.readSeedManifest(it)] }
-            def tw = Math.max(16, seeds*.name*.size().max())
-            def bw = Math.max(11, (ms.values().collect { (it?.base_branch ?: '-').size() } as List).max())
-            def fmt = "%-${tw}s %10s  %-19s %-${bw}s  %s"
-            println String.format(fmt, 'TAG', 'SIZE', 'CREATED', 'BASE BRANCH', 'VOLUMES')
-            seeds.each { d ->
-                def m = ms[d.name]
-                def bytes = (d.listFiles() ?: []).findAll { it.isFile() }.sum { it.length() } ?: 0L
-                def vols = m?.volumes?.collect { it.name }?.join(' ') ?: '(no manifest)'
-                println String.format(fmt, d.name, String.format('%.1fG', bytes / 1073741824.0),
-                        m?.created ?: '?', m?.base_branch ?: '-', vols)
-            }
-            println "\nin $dir -- use one with:  z feature new <ticket> --seed <tag>"
-        }
+        if (!printTable(zfinUtil)) zfinUtil.info("no seeds yet ($dir)")
+        else println "\nin $dir -- use one with:  z feature new <ticket> --seed <tag>"
         if (incoming) println "unfinished (re-run the push/pull to resume, or delete ${dir}/${INCOMING}<tag>): ${incoming.join(', ')}"
+    }
+
+    /** The seeds table `z seed ls` prints; also what `?` shows at `z feature new`'s seed prompt,
+     *  which asks for `numbered` rows (so a number picks one) and marks its `current` default.
+     *  Returns the tags in the order shown -- empty when there are none. */
+    List<String> printTable(ZfinUtil zfinUtil, boolean numbered = false, String current = null, String indent = '') {
+        def dir = zfinUtil.seedsDir()
+        def seeds = ((dir.listFiles() ?: []) as List).findAll { it.isDirectory() && !it.name.startsWith('.') }.sort { it.name }
+        if (!seeds) return []
+        def ms = seeds.collectEntries { [it.name, zfinUtil.readSeedManifest(it)] }
+        def tw = Math.max(16, seeds*.name*.size().max())
+        def bw = Math.max(11, (ms.values().collect { (it?.base_branch ?: '-').size() } as List).max())
+        def nw = numbered ? String.valueOf(seeds.size()).size() + 4 : 0
+        def fmt = "${indent}${numbered ? "%-${nw}s" : '%s'}%-${tw}s %10s  %-19s %-${bw}s  %s"
+        println String.format(fmt, '', 'TAG', 'SIZE', 'CREATED', 'BASE BRANCH', 'VOLUMES')
+        seeds.eachWithIndex { d, i ->
+            def m = ms[d.name]
+            def bytes = (d.listFiles() ?: []).findAll { it.isFile() }.sum { it.length() } ?: 0L
+            def vols = m?.volumes?.collect { it.name }?.join(' ') ?: '(no manifest)'
+            def num = numbered ? "${d.name == current ? '*' : ' '}${i + 1})".padLeft(nw - 1) + ' ' : ''
+            println String.format(fmt, num, d.name, String.format('%.1fG', bytes / 1073741824.0),
+                    m?.created ?: '?', m?.base_branch ?: '-', vols)
+        }
+        seeds*.name
     }
 
     // ---- z seed restore ----------------------------------------------------------------
@@ -363,86 +388,168 @@ class Seed {
         info("seed '$tag' matches its manifest")
     }
 
-    // ---- z seed from-freeze -------------------------------------------------------------
-    private void fromFreeze(List args, ZfinUtil zfinUtil) {
+    // ---- z seed new --from <frozen stack> ---------------------------------------------------
+    // The stack's freeze archive already IS a seed's shape -- one tarball per volume, written by
+    // the same captureVolume -- so nothing is captured: the tarballs are hard-linked into the
+    // seed and only seed.json is new. create() hands over here when the stack is frozen.
+    private void fromArchive(String project, File src, Map o, ZfinUtil zfinUtil) {
         def die = zfinUtil.&die; def info = zfinUtil.&info
-        String slug = null, tag = null, baseBranch = null
-        boolean copy = false
-        for (int i = 0; i < args.size(); i++) {
-            switch (args[i]) {
-                case '--tag': tag = args[++i]; break
-                case '--base-branch': baseBranch = args[++i]; break
-                case '--copy': copy = true; break
-                default:
-                    if (args[i].startsWith('-')) die("z seed from-freeze: unknown arg '${args[i]}'", 2)
-                    if (slug) die("z seed from-freeze: one ticket at a time", 2)
-                    slug = args[i].toLowerCase()
-            }
-        }
-        slug = slug ?: zfinUtil.featureSlugFromCwd()
-        if (!slug) die("usage: z seed from-freeze [<ticket>] [--tag TAG] [--base-branch B] [--copy]\n" +
-                       "   (or run it inside the frozen feature's worktree)", 2)
-
-        def src = new File(zfinUtil.archiveDir(), slug)
-        def mf = new File(src, StackConfig.FREEZE_MANIFEST)
-        if (!mf.isFile()) die("'$slug' has no freeze archive at $src -- freeze it first:  z freeze $slug")
-        def fm = new groovy.json.JsonSlurper().parse(mf) as Map
-        // Only a finished freeze is one consistent capture. A partial one is missing volumes that
-        // are still in docker, and an abandoned one has been thawed: its stack has moved on.
-        if (fm.state != 'complete')
-            die("'$slug's freeze is ${fm.state ?: 'unfinished'}, not complete -- " +
-                (fm.state == 'partial' ? "finish it first:  z freeze $slug" : "freeze it again first:  z freeze $slug"))
-        if (fm.data == 'shared')
-            die("'$slug' runs on the shared data stack, so its freeze holds no db or solr of its own to seed from.")
+        def runCommand = zfinUtil.&runCommand
+        def fm = new groovy.json.JsonSlurper().parse(new File(src, StackConfig.FREEZE_MANIFEST)) as Map
         def vns = ((fm.volumes ?: []) as List).collect { it as String }
-        def absent = StackConfig.DATA_VOLS.findAll { !(it in vns) || !zfinUtil.archiveFileFor(src, it) }
-        if (absent) die("'$slug's freeze archive has no ${absent.join(', ')} ($src)")
         def lost = vns.findAll { !zfinUtil.archiveFileFor(src, it) }
-        if (lost) die("'$slug's freeze manifest lists ${lost.join(', ')}, but $src has no archive of ${lost.size() == 1 ? 'it' : 'them'}")
+        if (lost) die("'$project's freeze manifest lists ${lost.join(', ')}, but $src has no archive of ${lost.size() == 1 ? 'it' : 'them'}")
+        // The same choices as a live capture: the app tier unless --no-app, caches only with --caches.
+        if (!o.app) vns -= (StackConfig.APP_VOLS + StackConfig.APP_COMPANION_VOLS)
+        def cachesHere = vns.findAll { it in StackConfig.CACHE_VOLS }
+        if (!o.caches && cachesHere) { vns -= cachesHere; info("note: leaving out the archived ${cachesHere.join(', ')} (--caches to include)") }
 
-        tag = tag ?: "${slug}-${java.time.LocalDate.now()}"
-        if (!(tag ==~ /[A-Za-z0-9][A-Za-z0-9._-]*/)) die("--tag '$tag': letters, digits, '.', '_' and '-' only", 2)
+        Map sh = null
+        if (fm.data == 'shared') {
+            sh = sharedSource(project, o.withShared as boolean, o.stopSharers as boolean, zfinUtil)
+            vns -= StackConfig.DATA_VOLS
+        } else {
+            def absent = StackConfig.DATA_VOLS.findAll { !(it in vns) }
+            if (absent) die("'$project's freeze archive has no ${absent.join(', ')} ($src)")
+        }
+        def tag = o.tag as String
         def out = zfinUtil.seedDir(tag)
-        if (out.exists()) die("seed '$tag' already exists at $out\n   Pick another --tag, or remove it:  z seed rm $tag")
-        def pgMajor = zfinUtil.archivePgMajor(zfinUtil.archiveFileFor(src, 'pg_data'))
-        if (!pgMajor) info("note: could not read PG_VERSION from the archive -- the manifest will not record a major version")
-        baseBranch = baseBranch ?: fm.branch
+        def baseBranch = o.baseBranch ?: fm.branch
+        def sp = sh?.sp
 
-        info("seed from-freeze: '$slug' (branch ${fm.branch ?: '?'}, frozen ${fm.frozenAt ?: '?'}) -> seed '$tag'")
+        info("seed new: from=$project (frozen ${fm.frozenAt ?: '?'}, branch ${fm.branch ?: '?'}) tag=$tag -> $out" +
+             (sh ? "\n   db+solr from the shared data stack '$sp' (${sh.mode == 'live' ? 'live' : 'frozen archive'})" : ''))
         def work = new File(zfinUtil.seedsDir(), INCOMING + tag)
         work.deleteDir(); work.mkdirs()
-        def done = [ok: false]
-        // die() is System.exit, which skips finally: a hook is what keeps a half-made seed out.
-        Runtime.runtime.addShutdownHook(new Thread({ if (!done.ok) work.deleteDir() } as Runnable))
-        def timer = zfinUtil.stepTimer()
-        int linked = 0
-        vns.each { vn ->
-            def f = zfinUtil.archiveFileFor(src, vn)
-            def to = new File(work, f.name).toPath()
-            if (!copy) {
-                // Fails across filesystems (and on some NFS mounts): fall back to a copy.
-                try { java.nio.file.Files.createLink(to, f.toPath()); linked++; return }
-                catch (IOException | UnsupportedOperationException ignored) { }
+        def stopped = [:]   // service -> container id stopped here, restarted afterwards
+        def done = [ok: false, restarted: false]
+        // die() is System.exit, which skips finally: a hook is what keeps a half-made seed out,
+        // and what starts the shared db+solr again if the capture dies with them stopped.
+        Runtime.runtime.addShutdownHook(new Thread({
+            if (!done.restarted) stopped.each { svc, cid ->
+                System.err.println("!! [cleanup] starting the shared $svc again")
+                zfinUtil.runQuietly(['docker', 'start', cid])
             }
-            info(String.format("  copying %s (%.0f MB)", f.name, f.length() / 1048576.0))
-            java.nio.file.Files.copy(f.toPath(), to)
+            if (!done.ok) work.deleteDir()
+        } as Runnable))
+        def timer = zfinUtil.stepTimer()
+        def how = [linked: 0, copied: 0, captured: 0]
+        vns.each { how[linkInto(zfinUtil.archiveFileFor(src, it), work, o.copy as boolean, zfinUtil)]++ }
+        timer.mark(how.copied ? 'copy archives' : 'link archives')
+
+        def platform = fm.platform
+        Map sharedNote = null
+        if (sh?.mode == 'archive') {
+            StackConfig.DATA_VOLS.each { how[linkInto(zfinUtil.archiveFileFor(sh.dir as File, it), work, o.copy as boolean, zfinUtil)]++ }
+            timer.mark('link shared archives')
+            sharedNote = [project: sp, from: 'frozen archive', frozen_at: sh.fm.frozenAt ?: '']
+        } else if (sh?.mode == 'live') {
+            def img = zfinUtil.projectDbImage(sp) ?: zfinUtil.dbImage()
+            platform = zfinUtil.dataPlatform(sp)
+            StackConfig.DATA_SERVICES.each { svc ->
+                def cid = zfinUtil.captureOutput(['docker', 'ps', '-q', '--filter', "label=com.docker.compose.project=$sp",
+                                                  '--filter', "label=com.docker.compose.service=$svc"])
+                if (cid) {
+                    info("stopping the shared $svc" + (svc == 'db' ? " (up to 120s for postgres to checkpoint)" : ''))
+                    runCommand(['docker', 'stop', '-t', '120', cid])
+                    stopped[svc] = cid
+                }
+            }
+            timer.mark('stop shared data tier')
+            // pg_resetwal without -f is also the clean-shutdown check: it refuses a cluster that
+            // was not shut down cleanly, and a torn PGDATA must not go into a seed.
+            info("trimming the shared pg_data's WAL (pg_resetwal; refuses an unclean shutdown)")
+            if (!zfinUtil.trimWal("${sp}_pg_data".toString(), img))
+                die("pg_resetwal declined (above): the shared db was not shut down cleanly, so it is not captured.")
+            timer.mark('trim WAL')
+            StackConfig.DATA_VOLS.each { vn ->
+                zfinUtil.captureVolume("${sp}_${vn}".toString(), new File(work, "${vn}.tgz")); how.captured++
+            }
+            timer.mark('capture shared volumes')
+            stopped.each { svc, cid -> info("starting the shared $svc again"); runCommand(['docker', 'start', cid]) }
+            done.restarted = true
+            timer.mark('restart shared data tier')
+            sharedNote = [project: sp, from: 'live capture', captured_at: new Date().format('yyyy-MM-dd HH:mm:ss'),
+                          sharers_running: sh.busy]
         }
-        timer.mark(linked == vns.size() ? 'link archives' : 'copy archives')
-        zfinUtil.seedProvenance = [how: 'z seed from-freeze', freeze: slug, branch: fm.branch ?: '',
-                                   commit: fm.commit ?: '', frozen_at: fm.frozenAt ?: '']
-        zfinUtil.writeSeedManifest(work, [tag: tag, source_project: fm.project ?: slug, release: fm.zfinRelease ?: '',
-                                          pg_major: pgMajor ?: '', platform: fm.platform, base_branch: baseBranch,
-                                          volumes: vns])
+        def all = vns + (sh ? StackConfig.DATA_VOLS : [])
+
+        def pgMajor = zfinUtil.archivePgMajor(zfinUtil.archiveFileFor(work, 'pg_data'))
+        if (!pgMajor) info("note: could not read PG_VERSION from the archive -- the manifest will not record a major version")
+        zfinUtil.seedProvenance = [how: 'z seed new --from (frozen)', freeze: project, branch: fm.branch ?: '',
+                                   commit: fm.commit ?: '', frozen_at: fm.frozenAt ?: ''] +
+                                  (sharedNote ? [shared_data: sharedNote] : [:])
+        zfinUtil.writeSeedManifest(work, [tag: tag, source_project: fm.project ?: project, release: fm.zfinRelease ?: '',
+                                          pg_major: pgMajor ?: '', platform: platform, base_branch: baseBranch,
+                                          volumes: all])
         timer.mark('checksum + manifest')
         java.nio.file.Files.move(work.toPath(), out.toPath())
         done.ok = true
-        def total = vns.sum(0L) { zfinUtil.archiveFileFor(out, it).length() } as long
-        info(String.format("seed '%s' written: %.1fG across %d volume(s), %s -> %s", tag, total / 1073741824.0, vns.size(),
-                linked == vns.size() ? 'hard-linked to the freeze archive (no extra disk)'
-                        : linked ? "$linked hard-linked, ${vns.size() - linked} copied" : 'copied', out))
-        info("it holds '$slug's data as frozen, base_branch ${baseBranch ?: '(none)'}")
+        def total = all.sum(0L) { zfinUtil.archiveFileFor(out, it).length() } as long
+        def parts = [how.linked ? "${how.linked} hard-linked" : null, how.copied ? "${how.copied} copied" : null,
+                     how.captured ? "${how.captured} captured" : null].findAll()
+        info(String.format("seed '%s' written: %.1fG across %d volume(s), %s -> %s", tag, total / 1073741824.0, all.size(),
+                parts == ["${all.size()} hard-linked".toString()] ? 'all hard-linked to the archives (no extra disk)' : parts.join(', '), out))
+        info(sh ? "it holds '$project's app tier as frozen and '$sp's db+solr " +
+                  (sh.mode == 'live' ? 'as of now' : "as frozen ${sh.fm.frozenAt ?: ''}".trim()) + ", base_branch ${baseBranch ?: '(none)'}"
+                : "it holds '$project's data as frozen, base_branch ${baseBranch ?: '(none)'}")
+        if (sh?.busy) info("the shared db restarted under ${sh.busy.join(', ')}: `z restart tomcat` in any that serve 500s")
         info("use it with:  z feature new <ticket> --seed $tag")
-        timer.report("seed from-freeze '$tag' timing")
+        timer.report("seed '$tag' timing")
+    }
+
+    /** Hard-link `f` into `dir` -- instant, no extra disk, and the link outlives the archive's
+     *  own -- or copy it when asked to, or when linking fails (another filesystem; some NFS).
+     *  Says which it did. */
+    private String linkInto(File f, File dir, boolean copy, ZfinUtil zfinUtil) {
+        def to = new File(dir, f.name).toPath()
+        if (!copy) {
+            try { java.nio.file.Files.createLink(to, f.toPath()); return 'linked' }
+            catch (IOException | UnsupportedOperationException ignored) { }
+        }
+        zfinUtil.info(String.format("  copying %s (%.0f MB)", f.name, f.length() / 1048576.0))
+        java.nio.file.Files.copy(f.toPath(), to)
+        'copied'
+    }
+
+    /** Where a --shared-db stack's db+solr come from, once the seed is to carry them as its own:
+     *  [sp, mode: 'archive', dir, fm] when the shared stack is frozen (link its tarballs), or
+     *  [sp, mode: 'live', busy] when it is up (stop, trim, capture, start). Asks to include them
+     *  unless --with-shared said so, and -- live -- for leave to cut off the stacks running on
+     *  them unless --stop-sharers did. Dies when there is nothing to take, or nothing it may stop.
+     *  Either way it is the shared data as it is NOW (or as of the shared freeze), with every
+     *  sharer's writes in it -- not as of any one feature. */
+    private Map sharedSource(String project, boolean withShared, boolean stopSharers, ZfinUtil zfinUtil) {
+        def die = zfinUtil.&die
+        def sp = zfinUtil.sharedProject()
+        def sArch = new File(zfinUtil.archiveDir(false), sp)
+        def live = StackConfig.DATA_VOLS.every { zfinUtil.volumeExists("${sp}_$it") }
+        def frozen = !live && new File(sArch, StackConfig.FREEZE_MANIFEST).isFile() &&
+                     StackConfig.DATA_VOLS.every { zfinUtil.archiveFileFor(sArch, it) }
+        if (!live && !frozen)
+            die("'$project' runs on the shared data stack '$sp', and this host has neither its volumes nor a\n" +
+                "   frozen archive of them -- there is no db+solr to put in the seed.")
+        if (live && !zfinUtil.managedSharedStack(sp))
+            die("'$project' runs on '$sp', which is not a shared stack z manages (its db lacks\n" +
+                "   ${StackConfig.SHARED_DATA_LABEL}), so it will not be stopped for a capture.")
+        def how = frozen ? "linked from its frozen archive ($sArch)"
+                         : "captured live: its db and solr STOP for the capture, then start again"
+        if (!withShared) {
+            def con = System.console()
+            if (!con) die("'$project' runs on the shared data stack '$sp' -- it has no db or solr of its own.\n" +
+                          "   --with-shared puts a copy of '$sp's db+solr in the seed, as its own: $how.")
+            println "'$project' runs on the shared data stack '$sp': it has an app tier, but no db or solr of its own."
+            println "The seed can carry a copy of the shared db+solr as its own -- $how."
+            println "It is the shared data as it is ${frozen ? 'in that archive' : 'now'}, with every sharer's changes in it."
+            def a = con.readLine("Include the shared db+solr in the seed? [y/N]: ")?.trim()?.toLowerCase()
+            if (!a?.startsWith('y')) die("aborted -- a seed needs a db and solr.", 0)
+        }
+        if (frozen)
+            return [sp: sp, mode: 'archive', dir: sArch,
+                    fm: new groovy.json.JsonSlurper().parse(new File(sArch, StackConfig.FREEZE_MANIFEST)) as Map]
+        def busy = zfinUtil.sharedDbUsers(sp)
+        zfinUtil.confirmStopShared(sp, busy, stopSharers)
+        [sp: sp, mode: 'live', busy: busy]
     }
 
     // ---- z seed rm ---------------------------------------------------------------------
@@ -466,6 +573,21 @@ class Seed {
         info(String.format("deleted seed '%s' (%.1fG)", tag, bytes / 1073741824.0))
     }
 
+    /** `project`'s freeze archive when the stack is FROZEN -- a complete freeze whose volumes
+     *  are no longer in docker -- else null (never frozen, or thawed since). A freeze that
+     *  stopped part-way is neither a stack nor an archive yet: say how to settle it. */
+    private File frozenArchive(String project, ZfinUtil zfinUtil) {
+        def dir = new File(zfinUtil.archiveDir(false), project)
+        def mf = new File(dir, StackConfig.FREEZE_MANIFEST)
+        if (!mf.isFile()) return null
+        def m
+        try { m = new groovy.json.JsonSlurper().parse(mf) as Map } catch (Exception ignored) { return null }
+        def vols = ((m.volumes ?: []) as List)
+        if (m.state == 'partial')
+            zfinUtil.die("'$project' is part-way through a freeze -- finish it (z freeze $project) or back out (z thaw $project) first.")
+        m.state == 'complete' && vols && vols.every { !zfinUtil.volumeExists("${project}_$it") } ? dir : null
+    }
+
     // ---- z seed new --from (and the old `create`) -------------------------------------
     private void create(List args, ZfinUtil zfinUtil) {
         def die = zfinUtil.&die; def info = zfinUtil.&info; def runCommand = zfinUtil.&runCommand
@@ -483,6 +605,7 @@ class Seed {
         def app = true       // small, and a cold stack is a worse default than a bigger seed
         def caches = false   // several GB and regenerable
         String baseBranch = null
+        boolean withShared = false, stopSharers = false, copy = false
 
         for (int i = 0; i < args.size(); i++) {
             switch (args[i]) {
@@ -495,6 +618,9 @@ class Seed {
                 case '--caches': caches = true; break
                 case '--no-caches': caches = false; break
                 case '--base-branch': baseBranch = args[++i]; break
+                case '--with-shared': withShared = true; break
+                case '--stop-sharers': stopSharers = true; break
+                case '--copy': copy = true; break
                 default: die("z seed new --from: unknown arg '${args[i]}'", 2)
             }
         }
@@ -502,24 +628,53 @@ class Seed {
         def release = zfinUtil.requireRelease()
         // The branch the source stack's checkout is on: the one you stand in, when it is this
         // stack, else a feature's worktree. None for anything else (or a detached HEAD).
-        if (baseBranch == null) {
-            def wt = new File(zfinUtil.worktreesDir(), project)
-            def tree = zfinUtil.childEnv['COMPOSE_PROJECT_NAME'] == project ? new File('.').canonicalPath
-                     : wt.isDirectory() ? wt.path : null
-            baseBranch = zfinUtil.gitBranchOf(tree)
+        def wt = new File(zfinUtil.worktreesDir(), project)
+        def tree = zfinUtil.childEnv['COMPOSE_PROJECT_NAME'] == project
+                 ? captureOutput(['git', 'rev-parse', '--show-toplevel']) ?: new File('.').canonicalPath
+                 : wt.isDirectory() ? wt.path : null
+        if (baseBranch == null) baseBranch = zfinUtil.gitBranchOf(tree)
+
+        // Before any prompt below: answering questions only to hear the tag is taken is no fun.
+        if (!(tag ==~ /[A-Za-z0-9][A-Za-z0-9._-]*/)) die("--tag '$tag': letters, digits, '.', '_' and '-' only", 2)
+        if (zfinUtil.seedDir(tag).exists())
+            die("seed '$tag' already exists at ${zfinUtil.seedDir(tag)}\n   Pick another --tag, or remove it:  z seed rm $tag")
+
+        // A FROZEN stack is copied from its archive instead: same seed, nothing to capture.
+        def frozen = frozenArchive(project, zfinUtil)
+        if (frozen) {
+            fromArchive(project, frozen, [tag: tag, app: app, caches: caches, baseBranch: baseBranch,
+                                          withShared: withShared, stopSharers: stopSharers, copy: copy], zfinUtil)
+            return
         }
+
+        // Where db+solr come from: the stack itself, or -- for a --shared-db feature, which has
+        // none of its own -- the shared data stack it runs on, copied into the seed AS ITS OWN.
+        // That needs the shared db+solr stopped for the capture, like any capture here, and
+        // every stack using them loses its connections meanwhile: so it is asked for.
+        def dataProject = project
+        def sharedBusy = []
+        Map sh = null
+        if (zfinUtil.stackSpec(tree ? new File(tree) : null)?.data == 'shared') {
+            sh = sharedSource(project, withShared, stopSharers, zfinUtil)
+            dataProject = sh.sp
+            sharedBusy = sh.busy ?: []
+            info("db+solr from the shared data stack '${sh.sp}' (${sh.mode == 'live' ? 'live' : 'frozen archive'}); app tier from '$project'")
+        }
+        // A frozen shared stack: its db+solr are LINKED from its archive, so there is nothing of
+        // theirs to stop, trim or capture -- only the app tier is captured, live.
+        def dataFromArchive = sh?.mode == 'archive'
 
         // Stock db image: the pg engine matching this data, used for the WAL-trim throwaway
         // postgres (which MUST be the db image). The tar capture below uses zfinUtil.tarImage()
         // (the compile image) -- the same source the restore uses. Both are local (no pull).
         // The image that WROTE this data, not this host's default: a --db-platform build runs
         // an amd64 db on an arm64 host, and its data must be trimmed by the same engine.
-        def stockDb = zfinUtil.projectDbImage(project) ?: zfinUtil.dbImage()
+        def stockDb = zfinUtil.projectDbImage(dataProject) ?: zfinUtil.dbImage()
         def stockPlat = zfinUtil.imagePlatform(stockDb)
         def platArgs = stockPlat ? ['--platform', stockPlat] : []
 
-        def pgVol = "${project}_pg_data"
-        def solrVol = "${project}_solr_var"
+        def pgVol = "${dataProject}_pg_data"
+        def solrVol = "${dataProject}_solr_var"
         def out = zfinUtil.seedDir(tag)
 
         info("seed new: from=$project release=$release tag=$tag -> $out")
@@ -530,7 +685,7 @@ class Seed {
         // Both named volumes must exist, or the capture would silently produce empties. When
         // they don't, say what WOULD work here: a stack that is loaded (--from), a seed this host
         // already has, or -- the usual case on a new host -- building one from a dump.
-        def missingVols = [pgVol, solrVol].findAll { runQuietly(['docker', 'volume', 'inspect', it]) != 0 }
+        def missingVols = dataFromArchive ? [] : [pgVol, solrVol].findAll { runQuietly(['docker', 'volume', 'inspect', it]) != 0 }
         if (missingVols) {
             def vols = captureOutput(['docker', 'volume', 'ls', '--format', '{{.Name}}']).readLines()
             def loaded = vols.findAll { it.endsWith('_pg_data') }*.replaceFirst(/_pg_data$/, '')
@@ -616,7 +771,7 @@ class Seed {
         // labels so no compose file / -f flags are needed.
         def runningContainer = { String svc ->
             captureOutput(['docker', 'ps', '-q',
-                           '--filter', "label=com.docker.compose.project=$project",
+                           '--filter', "label=com.docker.compose.project=$dataProject",
                            '--filter', "label=com.docker.compose.service=$svc"])
         }
         def stopped = [:]   // service -> container id we stopped
@@ -635,10 +790,10 @@ class Seed {
             }
         } as Runnable))
 
-        StackConfig.DATA_SERVICES.each { svc ->
+        if (!dataFromArchive) StackConfig.DATA_SERVICES.each { svc ->
             def cid = runningContainer(svc)
             if (cid) {
-                info("stopping $svc ($cid) for a consistent capture")
+                info("stopping ${dataProject == project ? "" : "the shared "}$svc ($cid) for a consistent capture")
                 runCommand(['docker', 'stop', cid])
                 stopped[svc] = cid
             }
@@ -646,14 +801,17 @@ class Seed {
 
         timer.mark('stop data tier')
         // Read while the source's db container still exists: its image wrote the data.
-        def dataPlatform = zfinUtil.dataPlatform(project)
-        trimSnapshot()   // sheds recycled WAL from the frozen snapshot
-        timer.mark('trim WAL')
+        def dataPlatform = zfinUtil.dataPlatform(dataProject)
+        if (!dataFromArchive) {
+            trimSnapshot()   // sheds recycled WAL from the frozen snapshot
+            timer.mark('trim WAL')
+        }
 
         // Read the postgres major straight out of the trimmed data, so the manifest can refuse a
         // restore into an engine that cannot open it. This is the 2026-09-18 near-miss made
         // impossible: PGDATA written by one release, baked onto a server from another.
-        def pgMajor = captureOutput(['docker', 'run', '--rm', '-u', '0', '-v', "${pgVol}:/d:ro",
+        def pgMajor = dataFromArchive ? zfinUtil.archivePgMajor(zfinUtil.archiveFileFor(sh.dir as File, 'pg_data'))
+                    : captureOutput(['docker', 'run', '--rm', '-u', '0', '-v', "${pgVol}:/d:ro",
                                      '--entrypoint', 'sh', zfinUtil.tarImage(),
                                      '-c', 'find /d -name PG_VERSION -exec cat {} + | head -1'])?.trim()
         if (!pgMajor) info("note: could not read PG_VERSION -- the manifest will not record a major version")
@@ -666,7 +824,8 @@ class Seed {
         def vns = StackConfig.DATA_VOLS + appPresent + companionsPresent + cachesPresent
         vns.each { vn ->
             def t = System.currentTimeMillis()
-            zfinUtil.captureVolume("${project}_${vn}", new File(out, "${vn}.tgz"))
+            if (dataFromArchive && vn in StackConfig.DATA_VOLS) linkInto(zfinUtil.archiveFileFor(sh.dir as File, vn), out, copy, zfinUtil)
+            else zfinUtil.captureVolume("${vn in StackConfig.DATA_VOLS ? dataProject : project}_${vn}", new File(out, "${vn}.tgz"))
             volSecs[vn] = (System.currentTimeMillis() - t) / 1000.0
         }
         timer.mark('capture volumes')
@@ -674,12 +833,17 @@ class Seed {
         // Restart exactly what we stopped (leave an already-down stack down), then mark the run
         // complete so the shutdown hook stands down -- the stack is back up from here.
         stopped.each { svc, cid ->
-            info("restarting $svc")
+            info("restarting ${dataProject == project ? "" : "the shared "}$svc")
             runCommand(['docker', 'start', cid])
         }
         state.completed = true
         timer.mark('restart source')
 
+        if (dataProject != project)
+            zfinUtil.seedProvenance = (zfinUtil.seedProvenance ?: [how: 'z seed new --from']) +
+                    [shared_data: dataFromArchive ? [project: dataProject, from: 'frozen archive', frozen_at: sh.fm.frozenAt ?: '']
+                                                  : [project: dataProject, from: 'live capture',
+                                                     captured_at: new Date().format('yyyy-MM-dd HH:mm:ss'), sharers_running: sharedBusy]]
         def manifest = zfinUtil.writeSeedManifest(out, [
                 tag: tag, source_project: project, release: release, pg_major: pgMajor ?: '',
                 platform: dataPlatform, base_branch: baseBranch,

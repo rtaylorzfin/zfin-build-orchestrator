@@ -23,8 +23,9 @@
 //
 // Restore-time checks still apply at the far end: `z feature new` refuses a seed whose
 // postgres major or platform does not fit that host's db image. That matters between a Mac
-// and a VM: an arm64 Mac's seeds hold an arm64 data directory unless they were built with
-// `z seed new --db-platform linux/amd64` (ZFIN_ALLOW_PLATFORM_MISMATCH=1 overrides).
+// and a VM only when the Mac's db image is arm64: one whose docker/.env sets
+// DOCKER_DB_PLATFORM=linux/amd64 (as the VMs' setup does) writes seeds the VMs take as they
+// are. ZFIN_ALLOW_PLATFORM_MISMATCH=1 overrides the check.
 //
 // THE DATA IS REAL ZFIN DATA. This copies it between hosts you can already ssh to, over ssh,
 // into a seeds directory there -- storage you control on both ends. It is not an upload

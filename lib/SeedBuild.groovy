@@ -19,11 +19,12 @@
 //                 names, or the one checked out; none for a bare commit). `z feature new`
 //                 notes when a feature's branch and base differ from it.
 //   --db-platform PLATFORM
-//                 run the db alone on PLATFORM (linux/amd64 or linux/arm64) instead of this
-//                 host's. On an arm64 Mac, linux/amd64 writes the data directory with the same
-//                 amd64 image the Linux VMs run, so the seed restores there; the seed records it
-//                 as its `platform`. Postgres runs under Rosetta then -- roughly 1.3-1.7x slower
-//                 for a load -- while compile and tomcat stay native.
+//                 run the db alone on PLATFORM (linux/amd64 or linux/arm64) for this build,
+//                 instead of what the checkout's docker/.env names (DOCKER_DB_ARCH /
+//                 DOCKER_DB_PLATFORM -- on a Mac set up like the VMs, already linux/amd64, so
+//                 its seeds restore there with no flag). The seed records it as its `platform`.
+//                 amd64 on an arm64 Mac runs under Rosetta -- roughly 1.3-1.7x slower for a
+//                 load -- while compile and tomcat stay native.
 //   --caches      also capture gradle/maven/npm into the seed (as z seed new --from --caches).
 //   --build       build the stock images instead of pulling them (z build configure --build).
 //   --pull        pull the stock images even when this host has them. Off by default: image

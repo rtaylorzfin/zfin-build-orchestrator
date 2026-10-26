@@ -140,7 +140,7 @@ tool's own files are found from where `z` lives, and the ZFIN checkout from wher
 | `lib/FeatureList.groovy` | List feature stacks (`z feature ls`). |
 | `lib/FeatureRemove.groovy` | Tear a feature down: down -v + worktree/branch/hosts (`z feature rm`). |
 | `lib/SeedBuild.groovy` | Build a seed from a db dump and a solr snapshot: the full load and deploy in a throwaway stack, captured and torn down (`z seed new`). |
-| `lib/Seed.groovy` | Capture a loaded stack's volumes as a reusable seed, or turn a freeze archive into one, and list/remove them (`z seed new --from\|from-freeze\|ls\|rm`; `z seed new` without `--from` hands off to SeedBuild); WAL trimmed on every capture. |
+| `lib/Seed.groovy` | Capture a loaded stack's volumes as a reusable seed, live or from its freeze archive, and list/remove them (`z seed new --from\|ls\|rm`; `z seed new` without `--from` hands off to SeedBuild); WAL trimmed on every capture. |
 | `lib/SeedTransfer.groovy` | Copy a seed between hosts over ssh, verified before it is renamed into place (`z seed push\|pull`). |
 | `lib/Zbuild.groovy` | Non-interactive, phased build/deploy orchestrator — the CI engine (`z build`; what GoCD stages should call). |
 | `lib/FreshInstall.groovy` | Guided day-zero setup on a bare workstation (`z fresh-install`). |
@@ -350,12 +350,15 @@ shape it:
   leaves the stack and its volumes up and prints how to inspect them and how to `--resume`.
 - **Provenance.** The seed's `seed.json` gains `built_from`: the dump's name and SHA-256, the
   snapshot, the ref and the commit whose code built the app tier.
-- **A seed for another platform.** `--db-platform linux/amd64` runs the db alone on amd64
-  (via `DOCKER_DB_ARCH`/`DOCKER_DB_PLATFORM` in the build stack's env), so an arm64 Mac writes
-  the data directory with the same image the Linux VMs run and the seed restores there. Postgres
-  then runs under Rosetta -- measured with pgbench at 1.25x slower for bulk load and 1.7x for
-  index builds -- while compile and tomcat stay native. The Mac itself will refuse to restore
-  that seed, correctly: its own db image is arm64.
+- **The db platform comes from the checkout's `docker/.env`.** The build stack's env is a
+  copy of it, so the seed's data directory is written by whatever db image that file names.
+  An arm64 Mac set up like the VMs has `DOCKER_ARCH=-arm64` with `DOCKER_DB_ARCH=` (empty: the
+  bare, amd64 tag) and `DOCKER_DB_PLATFORM=linux/amd64` -- the db alone runs amd64, so its seeds
+  (and every stack's data) match the Linux VMs and move between them. `z env show` lists the
+  three keys; `z env set` changes them. Postgres then runs under Rosetta -- measured with pgbench
+  at 1.25x slower for bulk load and 1.7x for index builds -- while compile and tomcat stay
+  native. `--db-platform linux/amd64|linux/arm64` overrides it for one build; a seed whose
+  platform differs from a host's db image is refused there at restore.
 - **This host's images.** `configure` pulls only images the host lacks (`--pull-missing`).
   Image tags are host-wide, so a plain pull would replace a locally built image for every
   stack here; the stacks restored from the seed run this host's images anyway. `--pull`
@@ -410,27 +413,42 @@ that it was not checked.
 
 **Base branch:** `seed.json` may record `base_branch`, the branch whose schema and data the seed
 holds. `z seed new --from` takes it from the source stack's checkout, `z seed new` from `--ref`
-(or the checked-out branch), `from-freeze` from the frozen feature; `--base-branch B` sets it on
+(or the checked-out branch) -- for a frozen stack, the frozen branch; `--base-branch B` sets it on
 any of them. `z seed ls` shows it, and `z feature new` prints a note -- never a refusal -- when
 the new feature neither is that branch nor starts from it: the stack gets that branch's tables,
 and `--liquibase` applies only this branch's deltas on top.
 
-### A seed from a freeze (`z seed from-freeze`)
+### Live or frozen: `z seed new --from` takes either
 
-A freeze archive is already a seed's shape -- one tarball per volume, written by the same
-capture -- so a frozen feature becomes a seed without thawing it:
+`--from` looks at the stack and takes each part from where it is. **Live volumes** are captured
+as above (db+solr stopped, WAL trimmed, started again). A **frozen** stack is not thawed: its
+freeze archive is already a seed's shape -- one tarball per volume, written by the same capture
+-- so the tarballs are **hard-linked** into the seed, which is instant and takes no extra disk;
+only seed.json is new (hashed afresh, the postgres major read from the archive). Thawing or
+removing the stack later drops only its own links. `--copy` copies instead, as does an archive
+on a different filesystem from the seeds.
 
 ```bash
-z seed from-freeze zfin-10562                  # -> seed zfin-10562-YYYY-MM-DD
-z seed from-freeze zfin-10562 --tag fish-fix --base-branch main
+z seed new --from zfin-10562                   # frozen: linked from its archive, seconds
+z seed new --from zfin-10562 --tag fish-fix --base-branch main
 ```
 
-The tarballs are **hard-linked** into the seed, which is instant and takes no extra disk;
-thawing or removing the feature later drops only its own links. `--copy` copies instead, and
-so does an archive on a different filesystem from the seeds. Only seed.json is new (hashed
-afresh, with the postgres major read from the archive). The freeze must be complete and hold
-its own db+solr, so not a `--shared-db` feature. The seed carries **that feature's** data:
-its schema changes and test rows, in every stack made from it.
+The flags mean the same either way: the app tier unless `--no-app`, the build caches only with
+`--caches`. A frozen stack's seed carries **that stack's** data -- its schema changes and test
+rows -- and its `base_branch` defaults to the frozen branch.
+
+**`--shared-db` features** have no db or solr of their own. `--with-shared` (or yes at the
+prompt) puts a copy of the shared stack's in the seed **as the seed's own**, taken the same way:
+
+- **shared stack frozen** (`z shared freeze`): its tarballs are hard-linked too;
+- **shared stack live:** its db and solr are stopped, the WAL trimmed (pg_resetwal, which also
+  refuses an unclean shutdown), captured, and started again. Every stack running on them loses
+  its db connections meanwhile -- the feature itself included -- so it asks first;
+  `--stop-sharers` authorises it without a terminal. `z restart tomcat` in any that serve 500s.
+
+Any mix works: a frozen feature on a live shared stack, a live one on a frozen shared stack. The
+shared data is as it is **now** (or as of the shared freeze), with every sharer's writes in it,
+not as of when the feature froze; `built_from.shared_data` in seed.json records which.
 
 ### Copying seeds between hosts (`z seed push` / `z seed pull`)
 
@@ -529,7 +547,8 @@ sudo ifconfig lo0 -alias <ip>     # (macOS only) drop the loopback alias
   postgres will not start. `platform` in `seed.json` and `freeze.json` is the platform of the
   **db image that wrote the data**, not the Docker host's: an arm64 Mac running the amd64 image
   under Rosetta writes an amd64 data directory, and the restore check compares it with this
-  host's db image (`zfin-db:<release>${DOCKER_ARCH}`). Moving a seed between arm64 and amd64 works in practice — both are
+  host's db image (`zfin-db:<release>${DOCKER_DB_ARCH}`, falling back to `${DOCKER_ARCH}` when
+  `DOCKER_DB_ARCH` is not in the `.env`). Moving a seed between arm64 and amd64 works in practice — both are
   little-endian with the same alignment, and the database runs in the same Debian container on
   both, so the usual collation hazard does not apply — but it is not something postgres
   guarantees, so verify with a query that uses a text index.

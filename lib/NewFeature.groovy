@@ -256,11 +256,25 @@ class NewFeature {
             // 'seed', not 'tag': --seed pushes 'seed', so checking 'tag' meant nothing ever
             // matched and --seed still prompted.
             if (!('seed' in explicit)) {
-                def tIn = con.readLine("  seed [${tag ?: 'none captured yet'}]  (none = cold stack): ")?.trim()
-                // Sets noSeed too, not just tag: the guard below has to tell "declined" from
-                // "this host has no seeds", and a bare null cannot.
-                if (tIn in ['none', '-']) { tag = null; noSeed = true }
-                else if (tIn) tag = tIn
+                // `?` lists the seeds, numbered, and asks again; a number then picks from that
+                // list. A tag this host does not have is asked again too, rather than accepted
+                // here and refused once the rest of the plan has been answered.
+                List<String> shown = []
+                while (true) {
+                    def tIn = con.readLine("  seed [${tag ?: 'none captured yet'}]  (none = cold stack, ? = list): ")?.trim()
+                    if (tIn == '?') {
+                        shown = new Seed().printTable(zfinUtil, true, tag, '    ')
+                        println(shown ? "    (* = the default; answer a number or a tag)" : "    (no seeds on this host -- none for a cold stack)")
+                        continue
+                    }
+                    // Sets noSeed too, not just tag: the guard below has to tell "declined" from
+                    // "this host has no seeds", and a bare null cannot.
+                    if (tIn in ['none', '-']) { tag = null; noSeed = true; break }
+                    if (!tIn) break
+                    if (shown && tIn ==~ /\d+/ && (tIn as int) >= 1 && (tIn as int) <= shown.size()) { tag = shown[(tIn as int) - 1]; break }
+                    if (tIn.startsWith('.') || !zfinUtil.seedDir(tIn).isDirectory()) { println "    no seed '$tIn' on this host -- ? lists them"; continue }
+                    tag = tIn; break
+                }
             }
             if (!('shared' in explicit))
                 doSharedDb = askYesNo(con, "  share the ${zfinUtil.sharedProject()} db+solr instead of your own copy (read-mostly)?", false)

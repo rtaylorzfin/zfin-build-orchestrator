@@ -86,7 +86,8 @@ if (bad == 0) println "  none"
 
 // ---- 3. no retired command names ----------------------------------------------------------
 def RETIRED = ['z seed create': 'z seed new --from <project>',
-               'z seed build' : 'z seed new']
+               'z seed build' : 'z seed new',
+               'z seed from-freeze': 'z seed new --from <ticket>']
 def transcripts = ['dev-stacks-by-example.md']   // recorded sessions: they show what was typed then
 def scanned = [new File(libDir, 'z')] +
               lib.listFiles().findAll { it.name.endsWith('.groovy') || it.name.endsWith('.sh') || it.name.endsWith('.bash') } +
