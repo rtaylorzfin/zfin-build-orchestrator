@@ -422,7 +422,7 @@ z shared status                         # what's attached;  z shared down [--rm-
 ```
 
 How it works: one shared stack runs db+solr, from the base compose file plus
-`docker-compose.overlay-shared.yml`: no published ports, Solr at feature sizing (6g limit, 4g
+`docker-compose.overlay-shared.yml`: no published ports, Solr at laptop sizing (8g limit, 4g
 heap, unless the main checkout's `docker/.env` says otherwise). A `--shared-db` feature
 uses `docker-compose.overlay-shared-db.yml`, which
 profile-suppresses its own db/solr so no per-feature copy is seeded. To reach the shared
@@ -493,9 +493,15 @@ sudo ifconfig lo0 -alias <ip>     # (macOS only) drop the loopback alias
 - **Ports:** stacks publish an offset on one address (`https 8443+N`, `http 8080+N`,
   `db 5432+N`, `tomcatdebug 5000+N`, `jenkins 9499+N`), so nothing needs `ifconfig lo0 alias` on
   macOS. The offset skips any port in those ranges already published on the host.
-- **Memory:** each feature's solr is capped lean (`4g` heap / `6g` limit) by
-  its `.env` (`DOCKER_SOLR_HEAP`/`DOCKER_SOLR_MEM_LIMIT`); the base stack keeps prod sizing (`12g`/`16g`). Running
-  several prod-sized solr at once OOM-kills them (exit 137).
+- **Memory:** a feature's solr heap grows on demand: it starts at `1g`, can reach `8g`, and
+  gives memory back within about two minutes of going idle, inside a `12g` container limit
+  (docker-compose.overlay-feature.yml). An idle stack costs about 1g; a full reindex (the
+  Index-Faceted-Search jobs) gets the heap its DIH caches need. A fixed 4g heap ran out on
+  the `expression` import, and Solr 9 then aborts itself (exit 134; `jvm_crash_<pid>.log` in
+  `/var/solr/logs`). Override per stack in its `.env` with `DOCKER_SOLR_HEAP_MIN`,
+  `DOCKER_SOLR_HEAP_MAX` and `DOCKER_SOLR_MEM_MAX`; the older `DOCKER_SOLR_HEAP` /
+  `DOCKER_SOLR_MEM_LIMIT` keys do nothing under the feature overlay. The base stack keeps prod
+  sizing (`12g`/`16g`). Two stacks reindexing at once can still squeeze a small host.
 - **Ownership (Linux):** things the `compile` container writes into a worktree — `node_modules`,
   `build/` — belong to uid 1000 on the host too, so a developer with a different uid cannot
   delete them. `z feature rm` reclaims them in a root container first. Docker Desktop maps

@@ -60,12 +60,12 @@ class SharedStack {
         if (tag) {
             zfinUtil.childEnv['ZFIN_SEED'] = tag
         }
-        // Solr at feature sizing, not the base file's production default (16g limit, 12g heap),
+        // Solr at laptop sizing, not the base file's production default (16g limit, 12g heap),
         // which a laptop's Docker VM cannot give it. One solr serving a few read-mostly features
         // needs no more than one feature's own. A value the base docker/.env sets wins.
         def baseEnv = new File(DOCKER, '.env')
-        if (!zfinUtil.envField(baseEnv, 'DOCKER_SOLR_MEM_LIMIT')) zfinUtil.childEnv['DOCKER_SOLR_MEM_LIMIT'] = StackConfig.FEATURE_SOLR_MEM
-        if (!zfinUtil.envField(baseEnv, 'DOCKER_SOLR_HEAP'))      zfinUtil.childEnv['DOCKER_SOLR_HEAP']      = StackConfig.FEATURE_SOLR_HEAP
+        if (!zfinUtil.envField(baseEnv, 'DOCKER_SOLR_MEM_LIMIT')) zfinUtil.childEnv['DOCKER_SOLR_MEM_LIMIT'] = StackConfig.SHARED_SOLR_MEM
+        if (!zfinUtil.envField(baseEnv, 'DOCKER_SOLR_HEAP'))      zfinUtil.childEnv['DOCKER_SOLR_HEAP']      = StackConfig.SHARED_SOLR_HEAP
 
         // ZFIN_SHARED_PROJECT can also point features at a real instance's data; that project
         // is not this command's to start, stop, freeze or thaw. Nor is a shared stack made by

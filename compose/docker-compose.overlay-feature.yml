@@ -4,7 +4,7 @@
 #   docker-compose.yml [+ docker-compose.overlay-shared-db.yml] + this [+ docker-compose.overlay-proxy-network.yml]
 #
 # Everything expressible as a VALUE lives in the stack's .env and is read by the base file:
-# published ports, solr sizing (StackConfig.featureEnv). What is left here is what a value cannot
+# published ports (StackConfig.featureEnv). What is left here is what a value cannot
 # say, or what the base file should not have to know about: suppressing services, not
 # advertising to a proxy, Jenkins' half of DISABLE_OIDC, and the Claude sidecar.
 services:
@@ -32,6 +32,28 @@ services:
       - -c
       - exec docker-entrypoint.sh "$$@" -c max_wal_size=${DOCKER_DB_MAX_WAL_SIZE:-1GB}
       - docker-entrypoint.sh
+  # Solr's heap GROWS to what a job needs instead of being reserved. The base file starts solr
+  # with SOLR_HEAP, which bin/solr turns into -Xms=-Xmx and then pre-touches (AlwaysPreTouch):
+  # the whole heap is resident from the first second, idle or not. Feature stacks had 4g that
+  # way, which serving queries never needed and a full reindex outgrew -- the DIH entities
+  # cache whole child tables in the heap (SortedMapBackedCache, ~30 per entity), and the
+  # expression import ran 4g out (Solr 9 then aborts: exit 134, jvm_crash_<pid>.log).
+  # So: commit 1g, allow 8g, and hand memory back once idle. G1PeriodicGCInterval runs a GC
+  # after 60s without one -- i.e. only when solr is idle -- and -G1PeriodicGCInvokesConcurrent
+  # makes it a full, compacting one: the default concurrent cycle frees nothing on an idle JVM,
+  # since nothing allocates to drive the collections that would. Measured: a heap grown to
+  # 4.7g was back to 1g (1.3g resident) within two minutes of idle; the pause took 143ms.
+  # bin/solr reads SOLR_JAVA_MEM only when SOLR_HEAP is empty, hence blanking it.
+  # mem_limit is heap max + ~4g for what lives outside the heap, as the base file sizes it; a
+  # ceiling, not a reservation. Own variable names on purpose: every feature .env written
+  # before this has DOCKER_SOLR_HEAP=4g / DOCKER_SOLR_MEM_LIMIT=6g, and `z feature refresh`
+  # never rewrites a key, so reading those would hold existing stacks at the old sizing.
+  # Those two keys do nothing under this overlay; these three override it per stack.
+  solr:
+    mem_limit: ${DOCKER_SOLR_MEM_MAX:-12g}
+    environment:
+      SOLR_HEAP: ""
+      SOLR_JAVA_MEM: "-Xms${DOCKER_SOLR_HEAP_MIN:-1g} -Xmx${DOCKER_SOLR_HEAP_MAX:-8g} -XX:G1PeriodicGCInterval=60000 -XX:-G1PeriodicGCInvokesConcurrent"
   # certbot asks for a real certificate for the stack's hostname. A feature stack's name is not
   # publicly resolvable, so it fails on every `up` and reads as a failure in `docker ps -a`; an
   # outside proxy with acme-companion issues certificates itself if it can. Nothing depends on it.

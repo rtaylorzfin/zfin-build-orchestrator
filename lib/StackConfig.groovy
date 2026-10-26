@@ -91,12 +91,15 @@ class StackConfig {
     // `z shared` runs from a real instance that ZFIN_SHARED_PROJECT may also name.
     static final String SHARED_DATA_LABEL = 'zfin.devstack.shared-data'
 
-    static final String FEATURE_SOLR_MEM  = '6g'
-    static final String FEATURE_SOLR_HEAP = '4g'
+    // The shared data stack's solr (`z shared`), which runs the base file's fixed heap. Its
+    // container limit is that heap PLUS what lives outside it -- direct buffers, metaspace,
+    // the JIT's code cache, thread stacks -- for which the base file allows ~4g (16g around a
+    // 12g heap). Feature stacks size solr in docker-compose.overlay-feature.yml instead, as a
+    // heap that grows on demand.
+    static final String SHARED_SOLR_MEM  = '8g'
+    static final String SHARED_SOLR_HEAP = '4g'
     static Map<String, String> featureEnv(String gitCommon = null, String gitDir = null) {
-        [ DOCKER_SOLR_MEM_LIMIT: FEATURE_SOLR_MEM,   // prod sizing (16g/12g) will not start on a
-          DOCKER_SOLR_HEAP     : FEATURE_SOLR_HEAP, // host shared with other stacks
-          // Where this tree's git lives. The containers bind both at these exact paths -- a
+        [ // Where this tree's git lives. The containers bind both at these exact paths -- a
           // worktree's .git is a FILE pointing into the main repo, so git cannot work in a
           // container that has only the worktree. See docker-compose.overlay-worktree.yml.
           DOCKER_GIT_COMMON_DIR  : gitCommon,

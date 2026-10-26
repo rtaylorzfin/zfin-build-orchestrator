@@ -389,8 +389,6 @@ class SeedBuild {
                 DOCKER_HTTPD_HTTPS_PORT : ephemeral,
                 DOCKER_JENKINS_HTTP_PORT: ephemeral,
                 DOCKER_TOMCATDEBUG_PORT : ephemeral,
-                DOCKER_SOLR_MEM_LIMIT   : StackConfig.FEATURE_SOLR_MEM,
-                DOCKER_SOLR_HEAP        : StackConfig.FEATURE_SOLR_HEAP,
                 // The feature overlay caps WAL at 1GB; this stack runs load-db, which wants the
                 // base file's headroom. The WAL it leaves is trimmed before capture anyway.
                 DOCKER_DB_MAX_WAL_SIZE  : '10GB',
