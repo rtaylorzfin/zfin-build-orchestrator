@@ -140,7 +140,8 @@ tool's own files are found from where `z` lives, and the ZFIN checkout from wher
 | `lib/FeatureList.groovy` | List feature stacks (`z feature ls`). |
 | `lib/FeatureRemove.groovy` | Tear a feature down: down -v + worktree/branch/hosts (`z feature rm`). |
 | `lib/SeedBuild.groovy` | Build a seed from a db dump and a solr snapshot: the full load and deploy in a throwaway stack, captured and torn down (`z seed new`). |
-| `lib/Seed.groovy` | Capture a loaded stack's volumes as a reusable seed, and list/remove them (`z seed new --from\|ls\|rm`; `z seed new` without `--from` hands off to SeedBuild); WAL trimmed on every capture. |
+| `lib/Seed.groovy` | Capture a loaded stack's volumes as a reusable seed, or turn a freeze archive into one, and list/remove them (`z seed new --from\|from-freeze\|ls\|rm`; `z seed new` without `--from` hands off to SeedBuild); WAL trimmed on every capture. |
+| `lib/SeedTransfer.groovy` | Copy a seed between hosts over ssh, verified before it is renamed into place (`z seed push\|pull`). |
 | `lib/Zbuild.groovy` | Non-interactive, phased build/deploy orchestrator — the CI engine (`z build`; what GoCD stages should call). |
 | `lib/FreshInstall.groovy` | Guided day-zero setup on a bare workstation (`z fresh-install`). |
 | `lib/z-completion.bash` | bash tab-completion for `z`; source it from `~/.bashrc`. |
@@ -407,6 +408,48 @@ short. `z seed verify <tag>` re-hashes them all; run it after copying a seed to 
 share, since it reads every byte. A tarball the manifest does not list is restored with a note
 that it was not checked.
 
+**Base branch:** `seed.json` may record `base_branch`, the branch whose schema and data the seed
+holds. `z seed new --from` takes it from the source stack's checkout, `z seed new` from `--ref`
+(or the checked-out branch), `from-freeze` from the frozen feature; `--base-branch B` sets it on
+any of them. `z seed ls` shows it, and `z feature new` prints a note -- never a refusal -- when
+the new feature neither is that branch nor starts from it: the stack gets that branch's tables,
+and `--liquibase` applies only this branch's deltas on top.
+
+### A seed from a freeze (`z seed from-freeze`)
+
+A freeze archive is already a seed's shape -- one tarball per volume, written by the same
+capture -- so a frozen feature becomes a seed without thawing it:
+
+```bash
+z seed from-freeze zfin-10562                  # -> seed zfin-10562-YYYY-MM-DD
+z seed from-freeze zfin-10562 --tag fish-fix --base-branch main
+```
+
+The tarballs are **hard-linked** into the seed, which is instant and takes no extra disk;
+thawing or removing the feature later drops only its own links. `--copy` copies instead, and
+so does an archive on a different filesystem from the seeds. Only seed.json is new (hashed
+afresh, with the postgres major read from the archive). The freeze must be complete and hold
+its own db+solr, so not a `--shared-db` feature. The seed carries **that feature's** data:
+its schema changes and test rows, in every stack made from it.
+
+### Copying seeds between hosts (`z seed push` / `z seed pull`)
+
+```bash
+z seed push 2026-10-09 is-zfin-dkr-p02        # this host's seed -> that host
+z seed pull is-zfin-dkr-p02 zfin-10562-2026-10-26   # that host's seed -> this host
+```
+
+Source first, destination second, like `scp`; both run from one side, because ssh often
+reaches only one way (a Mac reaches a VM, not the reverse). The host is anything ssh takes.
+It is rsync over ssh into `<seeds>/.incoming-<tag>/`, a SHA-256 check of every tarball against
+seed.json at the destination, then a rename to `<seeds>/<tag>/` -- so a seed appears under its
+name only once it has arrived whole. A transfer that stops leaves `.incoming-<tag>` (`z seed ls`
+lists it); the same command again resumes it. The far side needs ssh, rsync and `sha256sum`
+(or `shasum`), not `z`. Its seeds directory defaults to the same path as this host's; give
+`--remote-dir /abs/path` when it differs. An existing seed of that tag is replaced only with
+`--force`. `z feature new` on the far side still checks the seed's postgres major and platform
+against that host's db image.
+
 ---
 
 ## Sharing db+solr across features (`--shared-db`)
@@ -514,6 +557,8 @@ sudo ifconfig lo0 -alias <ip>     # (macOS only) drop the loopback alias
 Seeds carry a **real loaded ZFIN database**. They live on storage you control
 (`$ZFIN_SEEDS_DIR`), and there is deliberately **no upload path**: keeping the data
 off any registry is structural, not a policy someone has to remember. Do not add one.
+`z seed push`/`pull` are not one: they copy a seed over ssh between hosts you can already log
+in to, into the seeds directory there -- storage you control at both ends.
 
 Freeze archives and sidecar session archives (`$ZFIN_ARCHIVE_DIR`) carry the same expectation.
 Putting either on NFS is supported and encouraged; putting it anywhere

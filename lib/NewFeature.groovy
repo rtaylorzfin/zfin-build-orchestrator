@@ -364,7 +364,7 @@ class NewFeature {
         } else {
             // Fail fast, BEFORE the worktree, .env and volumes exist -- a bad seed should
             // leave no partial state behind.
-            def have = { -> (zfinUtil.seedsDir().listFiles() ?: []).findAll { it.isDirectory() }*.name.sort() }
+            def have = { -> (zfinUtil.seedsDir().listFiles() ?: []).findAll { it.isDirectory() && !it.name.startsWith('.') }*.name.sort() }
             // No tag has two meanings and they need different answers: --no-seed (or `none` at
             // the prompt) is a deliberate cold stack with nothing to validate, while an
             // unintended null means this host has no seeds and the run should stop before it
@@ -405,6 +405,16 @@ class NewFeature {
                 def unchecked = sm ? zfinUtil.untrackedSeedVolumes(seed, sm).findAll { it in restoring } : []
                 if (unchecked) info("note: ${unchecked.join(', ')} not in the seed's manifest, so restored unchecked " +
                                     "(z seed add-volumes records them)")
+                // The seed's schema and data follow the branch it was taken from. A feature that
+                // neither IS that branch nor starts from it gets that branch's tables anyway --
+                // usually fine (liquibase applies this branch's deltas on top), occasionally the
+                // reason something is missing or extra. A note, never a stop.
+                def mine = branch ?: name
+                if (sm?.base_branch && !(sm.base_branch in [base, mine]))
+                    System.err.println("!! note: seed '$tag' was taken from branch '${sm.base_branch}', but this feature " +
+                            (useExisting ? "is on '$mine'" : "starts from '$base'") + ".\n" +
+                            "   Its schema and data are ${sm.base_branch}'s; --liquibase applies this branch's deltas on top,\n" +
+                            "   but not anything ${sm.base_branch} has that this branch lacks. (z seed ls shows each seed's branch.)")
             }
         }
 

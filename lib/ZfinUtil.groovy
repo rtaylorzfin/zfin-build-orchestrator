@@ -982,7 +982,9 @@ class ZfinUtil {
      *  text, and sorting by name makes a tag like `mactest` outrank every dated one. The
      *  directory's mtime covers a manifest without the field. */
     String newestSeed() {
-        def dirs = (seedsDir().listFiles() ?: []).findAll { it.isDirectory() && new File(it, StackConfig.SEED_MANIFEST).isFile() }
+        // Not dot-directories: Seed.INCOMING holds a seed still being assembled.
+        def dirs = (seedsDir().listFiles() ?: []).findAll { it.isDirectory() && !it.name.startsWith('.') &&
+                                                            new File(it, StackConfig.SEED_MANIFEST).isFile() }
         def when = { File d ->
             readSeedManifest(d)?.created ?: new Date(d.lastModified()).format('yyyy-MM-dd HH:mm:ss')
         }
@@ -1060,11 +1062,45 @@ class ZfinUtil {
         }
         def m = [tag: meta.tag, created: new Date().format('yyyy-MM-dd HH:mm:ss'),
                  source_project: meta.source_project, release: meta.release,
-                 pg_major: meta.pg_major, platform: meta.platform ?: dockerPlatform(), volumes: vols]
+                 pg_major: meta.pg_major, platform: meta.platform ?: dockerPlatform()]
+        // Optional: the branch whose schema and data the seed holds. Advice, never a check --
+        // `z feature new` notes a mismatch, because restoring it under another branch is
+        // routine (liquibase catches the stack up) but worth knowing about.
+        if (meta.base_branch) m.base_branch = meta.base_branch
+        m.volumes = vols
         if (seedProvenance) m.built_from = seedProvenance
         new File(dir, StackConfig.SEED_MANIFEST).text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(m))
         m
     }
+
+    /** The branch `ref` names in `repo`, or null for anything that is not a branch (a commit,
+     *  a tag, a detached HEAD). No ref means what the checkout has checked out. A remote branch
+     *  answers without its remote: `origin/main` is `main`, the name a seed's base_branch is
+     *  compared against. */
+    String gitBranchOf(String repo, String ref = null) {
+        if (!repo) return null
+        if (!ref || ref == 'HEAD')
+            return captureOutput(['git', '-C', repo, 'symbolic-ref', '--short', '-q', 'HEAD']) ?: null
+        def has = { String r -> runQuietly(['git', '-C', repo, 'show-ref', '--verify', '-q', r]) == 0 }
+        if (has("refs/heads/$ref")) return ref
+        if (has("refs/remotes/$ref")) return ref.replaceFirst('^[^/]+/', '')
+        null
+    }
+
+    /** The PostgreSQL major version in a pg_data archive, from the PG_VERSION files at the front
+     *  of the tarball -- under a second, since tar stops at the first one rather than reading
+     *  the archive through. Null when there is none (or the archive cannot be read). */
+    String archivePgMajor(File f) {
+        if (!f?.isFile()) return null
+        def z = f.name.endsWith('.tgz') ? 'z' : ''
+        captureOutput(['docker', 'run', '--rm', '-u', '0', '--entrypoint', 'sh',
+                       '-v', "${f.parentFile.absolutePath}:/in:ro", tarImage(), '-c',
+                       "tar -x${z}Of '/in/${f.name}' --wildcards --occurrence=1 '*/PG_VERSION' 2>/dev/null | grep -m1 -E '^[0-9]+\$'"])
+                ?.find(/^\d+/)
+    }
+
+    /** `s` quoted for a POSIX shell: what goes into a command ssh hands the remote shell. */
+    static String shq(String s) { "'" + s.replace("'", "'\\''") + "'" }
 
     /** Read <dir>/seed.json, or null when it is absent or unparseable -- callers decide what a
      *  missing manifest means (ls prints "(no manifest)"; a restore refuses). */

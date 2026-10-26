@@ -12,7 +12,7 @@
 //   stack ops (target from cwd):        run exec up down pull log restart status  -> StackOps
 //   feature ops:                       feature new|ls|rm|refresh|freeze|thaw|session
 //                                      (freeze/thaw also top-level: `z freeze` in a worktree)
-//   seeds (host-wide, not per ticket): seed new|restore|add-volumes|verify|ls|rm
+//   seeds (host-wide, not per ticket): seed new|from-freeze|push|pull|restore|add-volumes|verify|ls|rm
 //   host-wide stacks (own project):    shared (db+solr)
 //   CI / bootstrap:                    build fresh-install scaffold
 //
@@ -99,6 +99,10 @@ Seeds (a loaded stack's volumes, captured once and restored into many):
   z seed add-volumes <tag> [--from P] [VOL...]
                                          add volumes (default: the build caches) to a seed
   z seed verify [<tag>]                  re-hash a seed's tarballs against its manifest
+  z seed from-freeze [<ticket>] [--tag T]
+                                         make a seed of a frozen feature (hard links, no thaw)
+  z seed push <tag> <host>               copy a seed to another host (rsync over ssh)
+  z seed pull <host> <tag>               copy a seed from another host
   z seed ls / z seed rm <tag>            list / delete seeds
 
 Host:

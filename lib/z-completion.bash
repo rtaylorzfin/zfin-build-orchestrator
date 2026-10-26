@@ -13,6 +13,19 @@ _z_features() {
     find "$w" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sed 's#.*/##' | grep -vx main
 }
 
+# Seed tags for `z seed push <TAB>`: the seeds directory's entries, less unfinished
+# .incoming-* ones. $ZFIN_SEEDS_DIR when it is in the environment, else the dev tree's seeds/,
+# beside its worktrees/ (a ZFIN_SEEDS_DIR set only in zfin-dev.env is not seen: no JVM per key).
+_z_seeds() {
+    local d="$ZFIN_SEEDS_DIR" w
+    if [[ -z $d ]]; then
+        type _zfin_worktrees >/dev/null 2>&1 || return
+        w="$(_zfin_worktrees 2>/dev/null)" || return
+        d="${w%/*}/seeds"
+    fi
+    find "$d/" -mindepth 1 -maxdepth 1 -type d ! -name '.*' 2>/dev/null | sed 's#.*/##'
+}
+
 _z_complete() {
     local cur sub argstart=2
     cur="${COMP_WORDS[COMP_CWORD]}"
@@ -35,15 +48,17 @@ _z_complete() {
         shared)                    COMPREPLY=( $(compgen -W "up down status freeze thaw --tag --rm-data --stop-sharers --compress --no-compress --to --from" -- "$cur") ) ;;
         seed)
             if (( COMP_CWORD == argstart )); then
-                COMPREPLY=( $(compgen -W "new restore add-volumes verify ls rm" -- "$cur") )
+                COMPREPLY=( $(compgen -W "new from-freeze push pull restore add-volumes verify ls rm" -- "$cur") )
             else
                 case "${COMP_WORDS[argstart]}" in
                     new|build)   if [[ " ${COMP_WORDS[*]} " == *" --from "* ]]; then
-                                     COMPREPLY=( $(compgen -W "--tag --no-app --caches" -- "$cur") )
+                                     COMPREPLY=( $(compgen -W "--tag --no-app --caches --base-branch" -- "$cur") )
                                  else
-                                     COMPREPLY=( $(compgen -W "--from --db --solr --tag --ref --db-platform --caches --build --pull --keep --tmux --resume --clean" -- "$cur") )
+                                     COMPREPLY=( $(compgen -W "--from --db --solr --tag --ref --base-branch --db-platform --caches --build --pull --keep --tmux --resume --clean" -- "$cur") )
                                  fi ;;
                     create)      COMPREPLY=( $(compgen -W "--from --tag --no-app --caches" -- "$cur") ) ;;
+                    from-freeze) COMPREPLY=( $(compgen -W "$(_z_features) --tag --base-branch --copy" -- "$cur") ) ;;
+                    push|pull)   COMPREPLY=( $(compgen -W "$(_z_seeds) --remote-dir --force" -- "$cur") ) ;;
                     restore)     COMPREPLY=( $(compgen -W "--app --caches --force" -- "$cur") ) ;;
                     rm)          COMPREPLY=( $(compgen -W "--force" -- "$cur") ) ;;
                     add-volumes) COMPREPLY=( $(compgen -W "--from --force gradle_cache maven_cache npm_cache jenkins_data static_data" -- "$cur") ) ;;

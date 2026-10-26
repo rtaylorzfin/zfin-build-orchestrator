@@ -3,8 +3,12 @@
 //
 //   z seed new [--db DUMP] [--solr SNAPSHOT] [--tag TAG] ...   build one from the dumps
 //                                                             (see z seed new --help)
-//   z seed new --from PROJECT [--tag TAG] [--no-app] [--caches]
+//   z seed new --from PROJECT [--tag TAG] [--no-app] [--caches] [--base-branch B]
 //                                                             copy a stack that is already loaded
+//   z seed from-freeze [<ticket>] [--tag TAG] [--base-branch B] [--copy]
+//                                                             make a seed of a frozen feature
+//   z seed push <tag> <host> / z seed pull <host> <tag>     copy a seed between hosts (rsync
+//                                                             over ssh; see z seed push --help)
 //   z seed ls
 //   z seed rm <tag> [--force]
 //   z seed restore [<tag>] [--app] [--caches] [--force]
@@ -45,6 +49,19 @@
 //                    every feature comes up cold, so they are captured by DEFAULT.
 //   --caches         Also capture gradle/maven/npm. Several GB, and regenerable, so OFF by
 //                    default -- worth it on a host that makes many stacks.
+//   --base-branch B  The branch whose schema and data the seed holds, recorded as base_branch.
+//                    Default: the branch the source stack's checkout has checked out.
+//                    `z feature new` notes when a new feature's branch and base both differ.
+//
+//   from-freeze      Turn a feature's freeze archive into a seed, without thawing it: the
+//                    archive already IS a seed's shape (one tarball per volume, captured by the
+//                    same captureVolume), so the tarballs are HARD-LINKED into the seed -- instant,
+//                    and no extra disk -- and only seed.json is new. Thawing or removing the
+//                    feature later deletes its own links and leaves the seed's intact. --copy
+//                    copies instead; so does an archive on another filesystem than the seeds.
+//                    The freeze must be complete and must hold its own db+solr (not --shared-db).
+//                    Default tag: <ticket>-YYYY-MM-DD; default base_branch: the feature's branch.
+//                    The seed carries THAT FEATURE's data -- its schema changes, its test rows.
 //
 // WHAT A SEED IS. A directory of per-volume tarballs plus a manifest, at
 // $ZFIN_SEEDS_DIR/<tag>/. `z feature new --seed <tag>` restores it into a new stack.
@@ -76,6 +93,7 @@ class Seed {
             System.err.println(">> (z seed $sub is now z seed new${sub == 'create' ? ' --from <project>' : ''})")
         // Before the help guard, so `z seed new --help` prints SeedBuild's own header.
         if (sub == 'build' || (sub == 'new' && !rest.contains('--from'))) { new SeedBuild().run(rest, zfinUtil); return }
+        if (sub in ['push', 'pull']) { new SeedTransfer().run(args, zfinUtil); return }
         if (zfinUtil.helpRequested(args, this)) return
 
         switch (sub) {
@@ -93,9 +111,14 @@ class Seed {
             case 'restore': restore(rest, zfinUtil); break
             case 'add-volumes': addVolumes(rest, zfinUtil); break
             case 'verify': verify(rest, zfinUtil); break
-            default: die("z seed: unknown '${sub}' (new|restore|add-volumes|verify|ls|rm). See z seed --help.", 2)
+            case 'from-freeze': fromFreeze(rest, zfinUtil); break
+            default: die("z seed: unknown '${sub}' (new|from-freeze|push|pull|restore|add-volumes|verify|ls|rm). See z seed --help.", 2)
         }
     }
+
+    // Where a seed is assembled before it is renamed into place, so a half-written one is
+    // never taken for a seed (newestSeed, ls and restore all skip dot-directories).
+    static final String INCOMING = '.incoming-'
 
     // Said wherever a command needs a seed and the host has none.
     static final String NO_SEEDS = "no seeds on this host -- make one:  z seed new"
@@ -104,17 +127,28 @@ class Seed {
     private void list(List args, ZfinUtil zfinUtil) {
         def dir = zfinUtil.seedsDir()
         if (!dir.isDirectory()) { zfinUtil.info("no seeds yet ($dir)"); return }
-        def seeds = (dir.listFiles() ?: []).findAll { it.isDirectory() }.sort { it.name }
-        if (!seeds) { zfinUtil.info("no seeds yet ($dir)"); return }
-        println String.format("%-16s %10s  %-19s %s", 'TAG', 'SIZE', 'CREATED', 'VOLUMES')
-        seeds.each { d ->
-            def m = zfinUtil.readSeedManifest(d)
-            def bytes = (d.listFiles() ?: []).findAll { it.isFile() }.sum { it.length() } ?: 0L
-            def vols = m?.volumes?.collect { it.name }?.join(' ') ?: '(no manifest)'
-            println String.format("%-16s %9.1fG  %-19s %s", d.name, bytes / 1073741824.0,
-                    m?.created ?: '?', vols)
+        def all = (dir.listFiles() ?: []).findAll { it.isDirectory() }
+        // .incoming-<tag>: a seed still arriving (pull, push, from-freeze), or one whose
+        // transfer stopped. Not a seed yet, so not listed as one.
+        def incoming = all.findAll { it.name.startsWith(INCOMING) }*.name*.substring(INCOMING.size()).sort()
+        def seeds = all.findAll { !it.name.startsWith('.') }.sort { it.name }
+        if (!seeds) zfinUtil.info("no seeds yet ($dir)")
+        else {
+            def ms = seeds.collectEntries { [it.name, zfinUtil.readSeedManifest(it)] }
+            def tw = Math.max(16, seeds*.name*.size().max())
+            def bw = Math.max(11, (ms.values().collect { (it?.base_branch ?: '-').size() } as List).max())
+            def fmt = "%-${tw}s %10s  %-19s %-${bw}s  %s"
+            println String.format(fmt, 'TAG', 'SIZE', 'CREATED', 'BASE BRANCH', 'VOLUMES')
+            seeds.each { d ->
+                def m = ms[d.name]
+                def bytes = (d.listFiles() ?: []).findAll { it.isFile() }.sum { it.length() } ?: 0L
+                def vols = m?.volumes?.collect { it.name }?.join(' ') ?: '(no manifest)'
+                println String.format(fmt, d.name, String.format('%.1fG', bytes / 1073741824.0),
+                        m?.created ?: '?', m?.base_branch ?: '-', vols)
+            }
+            println "\nin $dir -- use one with:  z feature new <ticket> --seed <tag>"
         }
-        println "\nin $dir -- use one with:  z feature new <ticket> --seed <tag>"
+        if (incoming) println "unfinished (re-run the push/pull to resume, or delete ${dir}/${INCOMING}<tag>): ${incoming.join(', ')}"
     }
 
     // ---- z seed restore ----------------------------------------------------------------
@@ -329,6 +363,88 @@ class Seed {
         info("seed '$tag' matches its manifest")
     }
 
+    // ---- z seed from-freeze -------------------------------------------------------------
+    private void fromFreeze(List args, ZfinUtil zfinUtil) {
+        def die = zfinUtil.&die; def info = zfinUtil.&info
+        String slug = null, tag = null, baseBranch = null
+        boolean copy = false
+        for (int i = 0; i < args.size(); i++) {
+            switch (args[i]) {
+                case '--tag': tag = args[++i]; break
+                case '--base-branch': baseBranch = args[++i]; break
+                case '--copy': copy = true; break
+                default:
+                    if (args[i].startsWith('-')) die("z seed from-freeze: unknown arg '${args[i]}'", 2)
+                    if (slug) die("z seed from-freeze: one ticket at a time", 2)
+                    slug = args[i].toLowerCase()
+            }
+        }
+        slug = slug ?: zfinUtil.featureSlugFromCwd()
+        if (!slug) die("usage: z seed from-freeze [<ticket>] [--tag TAG] [--base-branch B] [--copy]\n" +
+                       "   (or run it inside the frozen feature's worktree)", 2)
+
+        def src = new File(zfinUtil.archiveDir(), slug)
+        def mf = new File(src, StackConfig.FREEZE_MANIFEST)
+        if (!mf.isFile()) die("'$slug' has no freeze archive at $src -- freeze it first:  z freeze $slug")
+        def fm = new groovy.json.JsonSlurper().parse(mf) as Map
+        // Only a finished freeze is one consistent capture. A partial one is missing volumes that
+        // are still in docker, and an abandoned one has been thawed: its stack has moved on.
+        if (fm.state != 'complete')
+            die("'$slug's freeze is ${fm.state ?: 'unfinished'}, not complete -- " +
+                (fm.state == 'partial' ? "finish it first:  z freeze $slug" : "freeze it again first:  z freeze $slug"))
+        if (fm.data == 'shared')
+            die("'$slug' runs on the shared data stack, so its freeze holds no db or solr of its own to seed from.")
+        def vns = ((fm.volumes ?: []) as List).collect { it as String }
+        def absent = StackConfig.DATA_VOLS.findAll { !(it in vns) || !zfinUtil.archiveFileFor(src, it) }
+        if (absent) die("'$slug's freeze archive has no ${absent.join(', ')} ($src)")
+        def lost = vns.findAll { !zfinUtil.archiveFileFor(src, it) }
+        if (lost) die("'$slug's freeze manifest lists ${lost.join(', ')}, but $src has no archive of ${lost.size() == 1 ? 'it' : 'them'}")
+
+        tag = tag ?: "${slug}-${java.time.LocalDate.now()}"
+        if (!(tag ==~ /[A-Za-z0-9][A-Za-z0-9._-]*/)) die("--tag '$tag': letters, digits, '.', '_' and '-' only", 2)
+        def out = zfinUtil.seedDir(tag)
+        if (out.exists()) die("seed '$tag' already exists at $out\n   Pick another --tag, or remove it:  z seed rm $tag")
+        def pgMajor = zfinUtil.archivePgMajor(zfinUtil.archiveFileFor(src, 'pg_data'))
+        if (!pgMajor) info("note: could not read PG_VERSION from the archive -- the manifest will not record a major version")
+        baseBranch = baseBranch ?: fm.branch
+
+        info("seed from-freeze: '$slug' (branch ${fm.branch ?: '?'}, frozen ${fm.frozenAt ?: '?'}) -> seed '$tag'")
+        def work = new File(zfinUtil.seedsDir(), INCOMING + tag)
+        work.deleteDir(); work.mkdirs()
+        def done = [ok: false]
+        // die() is System.exit, which skips finally: a hook is what keeps a half-made seed out.
+        Runtime.runtime.addShutdownHook(new Thread({ if (!done.ok) work.deleteDir() } as Runnable))
+        def timer = zfinUtil.stepTimer()
+        int linked = 0
+        vns.each { vn ->
+            def f = zfinUtil.archiveFileFor(src, vn)
+            def to = new File(work, f.name).toPath()
+            if (!copy) {
+                // Fails across filesystems (and on some NFS mounts): fall back to a copy.
+                try { java.nio.file.Files.createLink(to, f.toPath()); linked++; return }
+                catch (IOException | UnsupportedOperationException ignored) { }
+            }
+            info(String.format("  copying %s (%.0f MB)", f.name, f.length() / 1048576.0))
+            java.nio.file.Files.copy(f.toPath(), to)
+        }
+        timer.mark(linked == vns.size() ? 'link archives' : 'copy archives')
+        zfinUtil.seedProvenance = [how: 'z seed from-freeze', freeze: slug, branch: fm.branch ?: '',
+                                   commit: fm.commit ?: '', frozen_at: fm.frozenAt ?: '']
+        zfinUtil.writeSeedManifest(work, [tag: tag, source_project: fm.project ?: slug, release: fm.zfinRelease ?: '',
+                                          pg_major: pgMajor ?: '', platform: fm.platform, base_branch: baseBranch,
+                                          volumes: vns])
+        timer.mark('checksum + manifest')
+        java.nio.file.Files.move(work.toPath(), out.toPath())
+        done.ok = true
+        def total = vns.sum(0L) { zfinUtil.archiveFileFor(out, it).length() } as long
+        info(String.format("seed '%s' written: %.1fG across %d volume(s), %s -> %s", tag, total / 1073741824.0, vns.size(),
+                linked == vns.size() ? 'hard-linked to the freeze archive (no extra disk)'
+                        : linked ? "$linked hard-linked, ${vns.size() - linked} copied" : 'copied', out))
+        info("it holds '$slug's data as frozen, base_branch ${baseBranch ?: '(none)'}")
+        info("use it with:  z feature new <ticket> --seed $tag")
+        timer.report("seed from-freeze '$tag' timing")
+    }
+
     // ---- z seed rm ---------------------------------------------------------------------
     private void remove(List args, ZfinUtil zfinUtil) {
         def die = zfinUtil.&die; def info = zfinUtil.&info
@@ -366,6 +482,7 @@ class Seed {
         def tag = java.time.LocalDate.now().toString()   // YYYY-MM-DD
         def app = true       // small, and a cold stack is a worse default than a bigger seed
         def caches = false   // several GB and regenerable
+        String baseBranch = null
 
         for (int i = 0; i < args.size(); i++) {
             switch (args[i]) {
@@ -377,11 +494,20 @@ class Seed {
                 case '--no-app': app = false; break
                 case '--caches': caches = true; break
                 case '--no-caches': caches = false; break
+                case '--base-branch': baseBranch = args[++i]; break
                 default: die("z seed new --from: unknown arg '${args[i]}'", 2)
             }
         }
 
         def release = zfinUtil.requireRelease()
+        // The branch the source stack's checkout is on: the one you stand in, when it is this
+        // stack, else a feature's worktree. None for anything else (or a detached HEAD).
+        if (baseBranch == null) {
+            def wt = new File(zfinUtil.worktreesDir(), project)
+            def tree = zfinUtil.childEnv['COMPOSE_PROJECT_NAME'] == project ? new File('.').canonicalPath
+                     : wt.isDirectory() ? wt.path : null
+            baseBranch = zfinUtil.gitBranchOf(tree)
+        }
 
         // Stock db image: the pg engine matching this data, used for the WAL-trim throwaway
         // postgres (which MUST be the db image). The tar capture below uses zfinUtil.tarImage()
@@ -556,7 +682,7 @@ class Seed {
 
         def manifest = zfinUtil.writeSeedManifest(out, [
                 tag: tag, source_project: project, release: release, pg_major: pgMajor ?: '',
-                platform: dataPlatform,
+                platform: dataPlatform, base_branch: baseBranch,
                 volumes: vns])
         timer.mark('checksum + manifest')
         def total = (out.listFiles() ?: []).findAll { it.isFile() }.sum { it.length() } ?: 0L

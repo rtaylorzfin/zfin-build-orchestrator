@@ -2,7 +2,7 @@
 // whole build in a throwaway stack, capturing the result, and throwing the stack away.
 // (`z seed new --from PROJECT` copies a stack that is already loaded instead: z seed --help.)
 //
-//   z seed new [--db PATH|latest] [--solr PATH|latest] [--tag TAG] [--ref REF]
+//   z seed new [--db PATH|latest] [--solr PATH|latest] [--tag TAG] [--ref REF] [--base-branch B]
 //              [--db-platform PLATFORM] [--caches] [--build | --pull] [--keep] [--tmux]
 //   z seed new --tag TAG --resume     carry on with a build that stopped
 //   z seed new --tag TAG --clean      discard one: its stack, worktree and staging
@@ -14,6 +14,10 @@
 //   --tag TAG     the seed's name (default: today, YYYY-MM-DD).
 //   --ref REF     the commit whose code builds the app tier (default: HEAD of the checkout you
 //                 are standing in). Committed code only: the build runs in its own worktree.
+//   --base-branch BRANCH
+//                 the branch the seed records as its base_branch (default: the branch --ref
+//                 names, or the one checked out; none for a bare commit). `z feature new`
+//                 notes when a feature's branch and base differ from it.
 //   --db-platform PLATFORM
 //                 run the db alone on PLATFORM (linux/amd64 or linux/arm64) instead of this
 //                 host's. On an arm64 Mac, linux/amd64 writes the data directory with the same
@@ -64,7 +68,7 @@ class SeedBuild {
         def runCommand = zfinUtil.&runCommand; def captureOutput = zfinUtil.&captureOutput
         def runQuietly = zfinUtil.&runQuietly
 
-        def dbArg = null, solrArg = null, tag = null, ref = null, dbPlatform = null
+        def dbArg = null, solrArg = null, tag = null, ref = null, dbPlatform = null, baseBranch = null
         boolean caches = false, buildImages = false, pull = false, keep = false, tmux = false, resume = false, clean = false
         for (int i = 0; i < args.size(); i++) {
             switch (args[i]) {
@@ -72,6 +76,7 @@ class SeedBuild {
                 case '--solr':   solrArg = args[++i]; break
                 case '--tag':    tag = args[++i]; break
                 case '--ref':    ref = args[++i]; break
+                case '--base-branch': baseBranch = args[++i]; break
                 case '--db-platform': dbPlatform = args[++i]; break
                 case '--caches': caches = true; break
                 case '--build':  buildImages = true; break
@@ -238,7 +243,10 @@ class SeedBuild {
                     solr_snapshot : state.solr.name,
                     ref           : state.ref,
                     commit        : state.commit]
-            new Seed().run(['new', '--from', project, '--tag', tag] + (caches ? ['--caches'] : []), zfinUtil)
+            // A build that started before base_branch existed has none in its state: work it out.
+            def bb = baseBranch ?: state.baseBranch ?: zfinUtil.gitBranchOf(state.repo, state.ref)
+            new Seed().run(['new', '--from', project, '--tag', tag] + (caches ? ['--caches'] : []) +
+                           (bb ? ['--base-branch', bb] : []), zfinUtil)
             state.done << 'capture'; save(state)
             timer.mark('capture')
         }
@@ -401,6 +409,7 @@ class SeedBuild {
 
         [tag    : tag, project: project, created: new Date().format('yyyy-MM-dd HH:mm:ss'),
          ref    : ref ?: 'HEAD', commit: commit, repo: repoTop,
+         baseBranch: zfinUtil.gitBranchOf(repoTop, ref),
          // `container`: the same file as the build stack's containers see it.
          db     : [path: dump.absolutePath, name: dump.name, sha256: sha,
                    container: "/opt/zfin/unloads/db/${dump.parentFile.name}/${dump.name}"],
