@@ -405,6 +405,14 @@ class ZfinUtil {
         vals ? vals[-1] : ''
     }
 
+    /** Free text as a .env value. Compose reads the stack's docker/.env, and unquoted it would
+     *  interpolate `$` and cut at ` #`; single quotes are literal to it, so the text goes in single
+     *  quotes, with any quote of its own (which nothing could escape) turned typographic. */
+    static String envQuote(String s) { "'" + s.trim().replaceAll(/[\r\n]+/, ' ').replace("'", '\u2019') + "'" }
+
+    /** The inverse of envQuote: an envField value without its single quotes. */
+    static String envUnquote(String v) { (v ==~ /'.*'/) ? v.substring(1, v.length() - 1) : (v ?: '') }
+
     /** A duration for people: `42.3s` under a minute, then `4m 05s`, then `1h 02m 05s`.
      *  The timing reports run from seconds to hours, and "2843.6s" makes you do the sum. */
     static String dur(def secs) {

@@ -515,7 +515,8 @@ schema/writes should be a normal per-feature-copy stack.
 ## Listing + teardown
 
 ```bash
-z feature ls                      # all feature stacks: project, branch, data (own/shared), up/down, url
+z feature ls                      # active feature stacks: project, branch, data (own/shared), up/down, url
+z feature ls -v                   # ...plus frozen ones (-v = --all; --frozen for just those)
 z feature rm <ticket>             # tear one down (prompts; --force to skip)
 ```
 

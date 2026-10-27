@@ -38,7 +38,9 @@ _z_complete() {
     local services="base compile claude db solr httpd tomcat tomcatdebug blast mailpit jenkins ncbiload fail2ban certbot elasticsearch filebeat metricbeat kibana jbrowse processgff"
     case "$sub" in
         run|exec)                  COMPREPLY=( $(compgen -W "$services -u" -- "$cur") ) ;;
-        up|stop|pull|log|restart)  COMPREPLY=( $(compgen -W "$services" -- "$cur") ) ;;
+        up)                        if [[ "${COMP_WORDS[COMP_CWORD-1]}" == --arch ]]; then COMPREPLY=( $(compgen -W "amd64 arm64" -- "$cur") )
+                                   else COMPREPLY=( $(compgen -W "$services --arch" -- "$cur") ); fi ;;
+        stop|pull|log|restart)     COMPREPLY=( $(compgen -W "$services" -- "$cur") ) ;;
         status)                    COMPREPLY=( $(compgen -W "-v --verbose" -- "$cur") ) ;;
         freeze)                    COMPREPLY=( $(compgen -W "$(_z_features) --caches --compress --no-compress --to --force" -- "$cur") ) ;;
         thaw)                      COMPREPLY=( $(compgen -W "$(_z_features) --from --no-up --no-caches --force" -- "$cur") ) ;;
@@ -84,8 +86,8 @@ _z_complete() {
                 COMPREPLY=( $(compgen -W "new ls rm refresh freeze thaw session" -- "$cur") )
             else
                 case "${COMP_WORDS[argstart]}" in
-                    ls|list)         COMPREPLY=( $(compgen -W "--all --frozen" -- "$cur") ) ;;
-                    new)             COMPREPLY=( $(compgen -W "-y --yes --base --branch --existing-branch --no-existing-branch --seed --no-seed --port-offset --up --no-up --no-app --no-caches --shared-db --no-shared-db --node --no-node --deploy --no-deploy --liquibase --no-liquibase --tmux --no-tmux" -- "$cur") ) ;;
+                    ls|list)         COMPREPLY=( $(compgen -W "--all -v --frozen" -- "$cur") ) ;;
+                    new)             COMPREPLY=( $(compgen -W "-y --yes --desc --description --base --branch --existing-branch --no-existing-branch --seed --no-seed --port-offset --up --no-up --no-app --no-caches --shared-db --no-shared-db --node --no-node --deploy --no-deploy --liquibase --no-liquibase --tmux --no-tmux" -- "$cur") ) ;;
                     rm)              COMPREPLY=( $(compgen -W "$(_z_features) --force --keep-archive --no-session" -- "$cur") ) ;;
                     session)         if (( COMP_CWORD == argstart + 1 )); then
                                          COMPREPLY=( $(compgen -W "export ls" -- "$cur") )

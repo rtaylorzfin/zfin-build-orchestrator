@@ -28,6 +28,9 @@
 //   <name>          Feature id, e.g. ZFIN-9002 -> project "zfin-9002",
 //                   worktree "worktrees/zfin-9002", host "zfin-9002.<ZFIN_FEATURE_DOMAIN>".
 //                   Omit it (from a terminal) to be prompted.
+//   --desc TEXT     A one-line note on what this stack is for ("Mark's PR review", "slow
+//                   marker page"), shown by `z status`. Optional; prompted for interactively.
+//                   (--description is the long spelling.)
 //   -y, --yes       Don't prompt: take the defaults (and the flags given). What a script
 //                   or a non-TTY invocation gets automatically.
 //   --base BRANCH   Start point for the new branch (default: main; a warning fires
@@ -123,6 +126,7 @@ class NewFeature {
         def doTmux = false
         def assumeYes = false
         def name = ''
+        def desc = ''
 
 // Which decisions the COMMAND LINE already made. Every prompt below is skipped for a
 // decision that's in here, so a flag always wins over the interactive plan and
@@ -144,6 +148,7 @@ class NewFeature {
                 // -- an empty --seed '' is falsy and falls straight through to the newest one.
                 case '--no-seed': noSeed = true; tagArg = null; explicit << 'seed'; break
                 case '--port-offset': portOffset = argv[++i]; break
+                case '--desc': case '--description': desc = argv[++i]; explicit << 'desc'; break
                 case '--up': doUp = true; explicit << 'up'; break
                 case '--no-up': doUp = false; explicit << 'up'; break
                 case '--no-app': doApp = false; break
@@ -227,7 +232,7 @@ class NewFeature {
 // defaults instead, so an unattended caller never blocks on stdin.
         def con = System.console()
         def interactive = con != null && !assumeYes
-        if (!name && !con) die("usage: z feature new <name> [-y] [--base B] [--branch B] [--tag T] " +
+        if (!name && !con) die("usage: z feature new <name> [-y] [--base B] [--branch B] [--tag T] [--desc TEXT] " +
                 "[--port-offset N] [--up] [--shared-db] [--deploy] [--liquibase] [--tmux]", 2)
 
         if (interactive) {
@@ -236,6 +241,10 @@ class NewFeature {
                 name = con.readLine("  ticket / feature id (e.g. ZFIN-789): ")?.trim()
                 if (!name) System.err.println("    (required)")
             }
+            // Right after the name, while you are still thinking about what the stack is FOR.
+            // A ticket key says which work it is; this says why there is a stack for it.
+            if (!('desc' in explicit))
+                desc = con.readLine("  description (optional, shown by z status): ")?.trim() ?: ''
             // Existing branch: only worth a question when there IS one to reuse. Asked before
             // the base prompt because reusing a branch makes the base moot.
             if (!('existing' in explicit) && branchExists(branch ?: name)) {
@@ -651,6 +660,7 @@ class NewFeature {
         // joined, and every later compose run on it must interpolate the same name.
         if (proxyNet) outEnv << "ZFIN_PROXY_NETWORK=${proxyNet}\n"
         if (tag) outEnv << "ZFIN_SEED=$tag\n"
+        if (desc?.trim()) outEnv << "${StackConfig.DESC_KEY}=${zfinUtil.envQuote(desc)}\n"
         // A feature's tree is always a worktree, so it also gets the git mounts (stackSpec adds
         // the same overlay on every later command, from the tree itself).
         def composeFiles = ([new File(DOCKER, 'docker-compose.yml').absolutePath] +

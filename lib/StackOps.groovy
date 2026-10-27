@@ -126,6 +126,31 @@ class StackOps {
             case 'up':
                 requireStack()
                 refuseIfFrozen()
+                // --arch amd64|arm64: start these services from the other architecture's image,
+                // e.g. an amd64-only jenkins under emulation on an arm64 host. ZFIN tags amd64
+                // BARE and arm64 `-arm64`, so a platform name is taken rather than the suffix --
+                // `--arch ''` for amd64 would be both unguessable and easy to lose in a shell.
+                // It overrides DOCKER_ARCH (and DOCKER_DB_ARCH, which db reads first) for this one
+                // compose run; the shell environment outranks the .env in compose interpolation.
+                int ai = rest.findIndexOf { it == '--arch' || it.startsWith('--arch=') }
+                String archPlatform = null
+                if (ai >= 0) {
+                    def a = rest[ai]
+                    archPlatform = a.contains('=') ? a.split('=', 2)[1] : (ai + 1 < rest.size() ? rest[ai + 1] : null)
+                    rest = rest.take(ai) + rest.drop(ai + (a.contains('=') ? 1 : 2))
+                    def platform = archPlatform?.startsWith('linux/') ? archPlatform : "linux/$archPlatform"
+                    def suffix = archPlatform ? StackConfig.archSuffix(platform) : null
+                    if (suffix == null) die("z up --arch: expected amd64 or arm64, got '${archPlatform ?: ''}'", 2)
+                    // Services only: the whole stack on a foreign arch is a slower stack, never a
+                    // fix, and a bare `z up --arch` is far likelier to be a slip than a plan.
+                    if (!rest.any { !it.startsWith('-') })
+                        die("z up --arch needs the service(s) to switch, e.g. z up jenkins --arch amd64", 2)
+                    zfinUtil.childEnv['DOCKER_ARCH'] = suffix
+                    zfinUtil.childEnv['DOCKER_DB_ARCH'] = suffix
+                    // --no-deps: the override applies to every service in this compose run, so
+                    // without it `up jenkins` would also recreate db on the foreign arch.
+                    rest = ['--no-deps'] + rest
+                }
                 checkServices(rest)
                 // A --shared-db stack keeps its app tier single-homed and reaches shared data
                 // by connecting the shared db/solr into this feature's network -- so up must
@@ -141,6 +166,13 @@ class StackOps {
                 } else {
                     upCode = zfinUtil.runCommand(['docker', 'compose', 'up', '-d'] + rest, [check: false])
                 }
+                // Not recorded anywhere: the next `z up` that touches these services (a bare
+                // `z up` included) sees an image that differs from the .env's and recreates them
+                // on the native arch. Said once here so that is not a surprise.
+                if (archPlatform && upCode == 0)
+                    zfinUtil.info("note: --arch is for this run only -- a later `z up` without it recreates " +
+                                  "${rest.findAll { !it.startsWith('-') }.join(' ')} on the stack's own arch " +
+                                  "(z restart keeps it)")
                 def gap = stackProxyNet() ? zfinUtil.proxyReachProblem(stackProxyNet()) : null
                 if (gap) System.err.println("!! $gap")
                 System.exit(upCode)
@@ -180,6 +212,10 @@ class StackOps {
                 def ghMatch = origin =~ /github\.com[:\/](.+?)(?:\.git)?\/?$/
                 def ghSlug = ghMatch ? ghMatch[0][1] : ''
                 println "stack: $active"
+                // The note from `z feature new --desc`: why this stack exists, which the ticket
+                // key alone does not say once there are a few of them.
+                def desc = ZfinUtil.envUnquote(readEnv(StackConfig.DESC_KEY))
+                if (desc)    println "  desc     : $desc"
                 // URL first: it is the thing you came for -- the one line you copy, paste or
                 // click. dir/branch answer "which stack is this", which you usually already know.
                 if (zfinUtil.stackVar('ZFIN_STACK_URL'))    println "  url      : ${zfinUtil.stackVar('ZFIN_STACK_URL')}"
@@ -192,6 +228,11 @@ class StackOps {
                 if (ticket)  println "  jira     : https://zfin.atlassian.net/browse/$ticket"
                 if (branch && ghSlug) println "  pr       : https://github.com/$ghSlug/pull/new/$branch"
                 if (zfinUtil.stackVar('ZFIN_SEED')) println "  seed     : ${zfinUtil.stackVar('ZFIN_SEED')}"
+                // Own or shared data, in the short view: it decides whether a write, a migration
+                // or a reindex here touches only this stack or every --shared-db feature too.
+                def sharedData = zfinUtil.stackVar('COMPOSE_FILE')?.contains('shared-db.yml')
+                println "  data     : " + (sharedData ? "shared (${zfinUtil.sharedProject()} -- writes reach every --shared-db stack)"
+                                                      : "own (this stack's db+solr)")
                 if (stackProxyNet()) {
                     def onIt = zfinUtil.runningProxies().findAll { n, nets -> stackProxyNet() in nets }.keySet()
                     println "  proxy    : " + (onIt ? "${onIt.join(', ')} on ${stackProxyNet()}"
@@ -226,6 +267,15 @@ class StackOps {
                 // so they cost nothing on a healthy stack and are the whole point on a sick one.
                 if (sick)   println "  UNHEALTHY: ${sick*.svc.sort().join(' ')}"
                 if (failed) println "  FAILED   : ${failed.sort { it.svc }.collect { "${it.svc} (${it.status})" }.join(', ')}"
+                // A shared-data stack has no db/solr of its own -- the overlay suppresses them. One
+                // showing up means something ran compose WITHOUT the overlays (a bare `docker
+                // compose up` in the worktree's docker/), and it is not harmless: it joins this
+                // network under the same name as the shared container connected in with alias
+                // db/solr, so Docker's DNS answers `db` with either, at random, per lookup.
+                def strays = sharedData ? up.findAll { it.svc in StackConfig.DATA_SERVICES } + sick.findAll { it.svc in StackConfig.DATA_SERVICES } : []
+                if (strays) println "  STRAY    : own ${strays*.svc.sort().join('+')} on a shared-data stack -- ${strays*.svc.sort().collect { "`$it`" }.join('/')} " +
+                        "resolve${strays.size() == 1 ? 's' : ''} to it OR the shared one at random. Started without the overlays; " +
+                        "remove: docker rm -f ${strays*.svc.collect { "${active}-${it}-1" }.join(' ')}"
                 // `stopped` is noise by default -- base and blast exit 0 on every up by design.
                 if (verbose && idle) println "  stopped  : ${idle*.svc.sort().join(' ')}"
                 if (!verbose) { println ""; break }
@@ -246,7 +296,7 @@ class StackOps {
                 }
                 // A --shared-db stack's data tier lives in the separate shared project,
                 // so `docker compose ps` above won't list it. Show it explicitly.
-                if (zfinUtil.stackVar('COMPOSE_FILE')?.contains('shared-db.yml')) {
+                if (sharedData) {
                     def proj = zfinUtil.stackVar('COMPOSE_PROJECT_NAME')
                     println "\nshared data (project ${zfinUtil.sharedProject()}, connected into ${proj}_default):"
                     new ProcessBuilder(['docker', 'ps', '-a',

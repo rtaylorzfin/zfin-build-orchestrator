@@ -54,18 +54,19 @@ Stack ops (act on the stack that owns the working directory):
                         e.g. z run -c "gradle dirtydeploy"   (== zrun -c "...")
   z exec [svc] [args]   exec into the running container (default: compile)
   z up   [svc...]       start service(s)            (default: all)
+  z up svc... --arch amd64|arm64   ...from that arch's image, this run only
   z stop [svc...]       stop service(s), keeping containers + data
   z down [svc...]       remove containers + network (-v also discards this stack's data)
   z pull [svc...]       pull image(s)
   z log  [svc...]       tail logs
   z restart [svc...]    restart service(s)
-  z status [-v]         the active stack: url, dir, branch, links, what is running
+  z status [-v]         the active stack: url, desc, dir, branch, data, what is running
                         (-v adds ports, compose/env files, and the container table)
 
 Feature ops:
   z feature new [<ticket>] [opts]   provision a feature stack (prompts for the plan; -y
                                     takes the defaults)
-  z feature ls                      list feature stacks (project, branch, data, up/down, url)
+  z feature ls [-v|--all|--frozen]  list feature stacks (active only; -v/--all adds frozen)
   z feature rm <ticket> [--force]   tear down a feature (down -v + worktree/branch/hosts)
   z feature refresh <t>|--all       backfill .env keys a stack was made too early to have
   z feature freeze <ticket> [opts]  park it: archive its volumes, down -v, keep the worktree
@@ -658,6 +659,7 @@ stack: zfin-12345
   jira     : https://zfin.atlassian.net/browse/zfin-12345
   pr       : https://github.com/rtaylorzfin/zfin/pull/new/zfin-12345
   seed     : 2026-09-29
+  data     : own (this stack's db+solr)
   running  : db httpd solr tomcat
 
 14:47:31 ryan@mac:.../worktrees/zfin-12345$ sed -n '/added by new-feature/,$p' docker/.env

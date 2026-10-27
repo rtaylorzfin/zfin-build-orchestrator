@@ -61,6 +61,11 @@ class StackConfig {
     // DOMAIN_NAME is the default zfin.org, so absolute links the app builds point at production.
     static final String FEATURE_INSTANCE = 'feature'
 
+    // A feature's free-text note on what it is for (`z feature new --desc`), shown by `z status`.
+    // Kept in the stack's docker/.env with everything else z knows about it; quoted by
+    // ZfinUtil.envQuote, because compose reads that file too.
+    static final String DESC_KEY = 'ZFIN_FEATURE_DESCRIPTION'
+
     // The main checkout's own stack. A last-resort fallback only: every command that acts on a
     // stack resolves one from the working directory first.
     static final String BASE_PROJECT        = 'zfin_org'
