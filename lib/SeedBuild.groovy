@@ -4,14 +4,18 @@
 //
 //   z seed new [--db PATH|latest] [--solr PATH|latest] [--tag TAG] [--ref REF] [--base-branch B]
 //              [--db-platform PLATFORM] [--caches] [--build | --pull] [--keep] [--tmux]
-//   z seed new --tag TAG --resume     carry on with a build that stopped
-//   z seed new --tag TAG --clean      discard one: its stack, worktree and staging
+//   z seed new [--tag TAG] --resume   carry on with a build that stopped
+//   z seed new [--tag TAG] --clean    discard one: its stack, worktree and staging
+//                                     (no --tag: the one build there is, if there is one)
 //
 //   --db PATH     a .bak file, or a directory holding one. Default (or `latest`): the dump
 //                 `gradle loaddb` would pick from DOCKER_DB_UNLOADS_PATH.
 //   --solr PATH   a snapshot.* directory. Default (or `latest`): the newest snapshot under
 //                 DOCKER_SOLR_UNLOADS_PATH/zfindb, which is what getLatestSolrIndex restores.
-//   --tag TAG     the seed's name (default: today, YYYY-MM-DD).
+//   --tag TAG     the seed's name. Default: what it is built from, <dump>_<snapshot>_<commit>,
+//                 e.g. 2026.10.26.1_2026.10.27-01.43_b3df0e2 -- the dump's dated directory,
+//                 the snapshot's timestamp, and --ref's short commit. So the same inputs name
+//                 the same seed, and a build with nothing new refuses rather than duplicates.
 //   --ref REF     the commit whose code builds the app tier (default: HEAD of the checkout you
 //                 are standing in). Committed code only: the build runs in its own worktree.
 //   --base-branch BRANCH
@@ -89,20 +93,42 @@ class SeedBuild {
                 default: die("z seed new: unknown arg '${args[i]}' (see z seed new --help)", 2)
             }
         }
-        tag = tag ?: java.time.LocalDate.now().toString()
-        if (!(tag ==~ /[A-Za-z0-9][A-Za-z0-9._-]*/)) die("--tag: letters, digits, '.', '_' and '-' only (got '$tag')", 2)
         if (resume && clean) die("--resume and --clean are opposites; pick one", 2)
         if (dbPlatform != null && StackConfig.archSuffix(dbPlatform) == null)
             die("--db-platform: linux/amd64 or linux/arm64 (got '$dbPlatform')", 2)
 
-        def project = 'seedbuild-' + tag.toLowerCase().replaceAll(/[^a-z0-9_-]/, '-')
-        def stage = new File(zfinUtil.cacheDir().replaceFirst('^~', System.getProperty('user.home')), "seed-build/$tag")
+        def stages = new File(zfinUtil.cacheDir().replaceFirst('^~', System.getProperty('user.home')), 'seed-build')
+        def cwd = new File('.').canonicalFile
+        def repoTop = captureOutput(['git', '-C', cwd.absolutePath, 'rev-parse', '--show-toplevel']) ?: zfinUtil.REPO.absolutePath
+        def baseEnv = new File(zfinUtil.DOCKER, '.env')
+
+        // No --tag: a new build is named after its inputs, so they are resolved here, before
+        // anything else is named after the tag. --resume/--clean take the one build there is.
+        Map inputs = null
+        boolean derivedTag = !tag
+        if (!tag && (resume || clean)) {
+            def builds = ((stages.listFiles() ?: []) as List).findAll { new File(it, 'state.json').isFile() }*.name.sort()
+            if (builds.size() != 1)
+                die(builds ? "seed builds in progress: ${builds.join(', ')}. Name one:  z seed new --tag <tag> ${resume ? '--resume' : '--clean'}"
+                           : "no seed build in progress to ${resume ? 'resume' : 'clean'} (nothing under $stages)", 2)
+            tag = builds[0]
+        } else if (!tag) {
+            inputs = resolveInputs(dbArg, solrArg, ref, baseEnv, repoTop, zfinUtil)
+            tag = defaultTag(inputs)
+        }
+        if (!(tag ==~ /[A-Za-z0-9][A-Za-z0-9._-]*/)) die("--tag: letters, digits, '.', '_' and '-' only (got '$tag')", 2)
+        if (derivedTag && !resume && !clean && zfinUtil.readSeedManifest(zfinUtil.seedDir(tag)))
+            die("seed '$tag' already exists: it was built from this same dump, snapshot and commit.\n" +
+                "   Nothing new to build. To build it again anyway, remove it first:  z seed rm $tag")
+
+        // A hostname label too (featureHost below), so '-' only: no '_' or '.'.
+        def project = 'seedbuild-' + tag.toLowerCase().replaceAll(/[^a-z0-9-]/, '-')
+        def stage = new File(stages, tag)
         def stateF = new File(stage, 'state.json')
         def envF = new File(stage, 'stack.env')
         // Named after the project, not `src`: git registers a worktree under its directory's
         // name, and `git worktree list` should say what this one is.
         def src = new File(stage, project)
-        def baseEnv = new File(zfinUtil.DOCKER, '.env')
         // Base compose plus the feature overlay (a stack of ours: no certbot/fail2ban, advertises
         // nothing) and the worktree overlay (the build runs in its own git worktree, and the ant
         // build needs git). Colon-joined, as COMPOSE_FILE takes it (set below).
@@ -111,8 +137,6 @@ class SeedBuild {
                            new File(zfinUtil.COMPOSE, 'docker-compose.overlay-worktree.yml')]*.absolutePath.join(':')
         def compose = ['docker', 'compose', '-p', project, '--env-file', envF.absolutePath] +
                       composeFile.tokenize(':').collectMany { ['-f', it] }
-        def cwd = new File('.').canonicalFile
-        def repoTop = captureOutput(['git', '-C', cwd.absolutePath, 'rev-parse', '--show-toplevel']) ?: zfinUtil.REPO.absolutePath
         def inspectHint = "COMPOSE_PROJECT_NAME=$project COMPOSE_FILE=$composeFile COMPOSE_ENV_FILES=$envF z log tomcat"
 
         // ---- --tmux: re-run this same command inside a session, then attach -----------------
@@ -121,8 +145,11 @@ class SeedBuild {
             if (runQuietly(['tmux', 'has-session', '-t=' + project]) == 0)
                 die("a tmux session '$project' already exists -- it may be this build, still running:\n" +
                     "   tmux attach -t $project")
-            // --tag pinned, so a build started just before midnight does not change its name.
+            // --tag pinned, and a derived tag's inputs with it, so a dump or snapshot landing
+            // before the session starts cannot leave the seed misnamed.
             def inner = (args - ['--tmux']) + (args.contains('--tag') ? [] : ['--tag', tag])
+            if (inputs) inner = inner.withIndex().findAll { a, i -> !(a in ['--db', '--solr']) && !(i > 0 && inner[i - 1] in ['--db', '--solr']) }*.first() +
+                                ['--db', inputs.dump.absolutePath, '--solr', inputs.snap.absolutePath]
             def q = { String a -> "'" + a.replace("'", "'\\''") + "'" }
             def cmd = "ZFIN_SEED_BUILD_IN_TMUX=1 ${q(new File(zfinUtil.HOME, 'z').absolutePath)} seed new " +
                       inner.collect { q(it as String) }.join(' ') +
@@ -191,8 +218,8 @@ class SeedBuild {
                 die("the build stack's database volume is gone (${project}_pg_data), so the finished\n" +
                     "   phases cannot be trusted. Start over:  ${cleanCmd(tag)}")
         } else {
-            state = prepare(tag, project, dbArg, solrArg, ref, dbPlatform, caches, buildImages, stage, envF, src,
-                            baseEnv, repoTop, zfinUtil)
+            state = prepare(tag, project, inputs ?: resolveInputs(dbArg, solrArg, ref, baseEnv, repoTop, zfinUtil),
+                            ref, dbPlatform, caches, buildImages, stage, envF, src, baseEnv, repoTop, zfinUtil)
             save(state)
         }
         timer.mark('prepare')
@@ -269,24 +296,23 @@ class SeedBuild {
         timer.report("seed build '$tag' timing")
     }
 
-    /** Preflight, stage the inputs, make the worktree and the env file. Everything that can
-     *  refuse runs before anything is created, so a bad argument leaves nothing behind. */
-    private Map prepare(String tag, String project, String dbArg, String solrArg, String ref,
-                        String dbPlatform, boolean caches, boolean buildImages, File stage, File envF, File src,
-                        File baseEnv, String repoTop, ZfinUtil zfinUtil) {
-        def die = zfinUtil.&die; def info = zfinUtil.&info
-        def captureOutput = zfinUtil.&captureOutput; def runCommand = zfinUtil.&runCommand
+    /** The default tag: <dump>_<snapshot>_<commit>. The dump by its dated directory (the
+     *  unloads layout, 2026.10.26.1), or its file name when it sits somewhere else. */
+    static String defaultTag(Map inputs) {
+        def dir = inputs.dump.parentFile.name
+        def db = dir ==~ /\d{4}\.\d{2}\.\d{2}(\.\d+)?/ ? dir : inputs.dump.name.replaceFirst(/\.bak$/, '')
+        def solr = inputs.snap.name.replaceFirst(/^snapshot\./, '')
+        "${db}_${solr}_${inputs.commit.take(7)}".replaceAll(/[^A-Za-z0-9._-]/, '-')
+    }
+
+    /** What the build is made from: the dump, the snapshot and the commit. Resolved once, so the
+     *  default tag and the build name the same ones. */
+    private Map resolveInputs(String dbArg, String solrArg, String ref, File baseEnv, String repoTop, ZfinUtil zfinUtil) {
+        def die = zfinUtil.&die; def captureOutput = zfinUtil.&captureOutput
         def expand = { String p -> new File(p.replaceFirst('^~', System.getProperty('user.home'))).absoluteFile }
 
         // The build stack's env starts as a copy of this, and the dump paths come from it.
         if (!baseEnv.isFile()) die(zfinUtil.noBaseEnv())
-        zfinUtil.requireRelease()
-        if (zfinUtil.readSeedManifest(zfinUtil.seedDir(tag)) || (zfinUtil.seedDir(tag).listFiles() ?: []).any { it.isFile() })
-            die("seed '$tag' already exists at ${zfinUtil.seedDir(tag)}\n" +
-                "   Pick another --tag, or remove it:  z seed rm $tag")
-        if (zfinUtil.volumeExists("${project}_pg_data"))
-            die("volumes for '$project' already exist but there is no build state in $stage.\n" +
-                "   Clear them first:  ${cleanCmd(tag)}")
 
         // ---- the db dump --------------------------------------------------------------------
         File dump; boolean configuredDb
@@ -337,6 +363,26 @@ class SeedBuild {
         if (!commit) die("--ref ${ref ?: 'HEAD'}: not a commit in $repoTop")
         if (!ref && captureOutput(['git', '-C', repoTop, 'status', '--porcelain', '--untracked-files=no']))
             System.err.println("!! $repoTop has uncommitted changes. They are NOT in this build -- it builds ${commit.take(10)}.")
+        [dump: dump, configuredDb: configuredDb, snap: snap, configuredSolr: configuredSolr, commit: commit]
+    }
+
+    /** Preflight, make the worktree and the env file. Everything that can refuse runs before
+     *  anything is created, so a bad argument leaves nothing behind. */
+    private Map prepare(String tag, String project, Map inputs, String ref,
+                        String dbPlatform, boolean caches, boolean buildImages, File stage, File envF, File src,
+                        File baseEnv, String repoTop, ZfinUtil zfinUtil) {
+        def die = zfinUtil.&die; def info = zfinUtil.&info
+        def runCommand = zfinUtil.&runCommand
+        zfinUtil.requireRelease()
+        if (zfinUtil.readSeedManifest(zfinUtil.seedDir(tag)) || (zfinUtil.seedDir(tag).listFiles() ?: []).any { it.isFile() })
+            die("seed '$tag' already exists at ${zfinUtil.seedDir(tag)}\n" +
+                "   Pick another --tag, or remove it:  z seed rm $tag")
+        if (zfinUtil.volumeExists("${project}_pg_data"))
+            die("volumes for '$project' already exist but there is no build state in $stage.\n" +
+                "   Clear them first:  ${cleanCmd(tag)}")
+        File dump = inputs.dump, snap = inputs.snap
+        boolean configuredDb = inputs.configuredDb, configuredSolr = inputs.configuredSolr
+        String commit = inputs.commit
 
         // ---- room for the result ------------------------------------------------------------
         // The seed lands in the archive dir, compressed to very roughly half the inputs.

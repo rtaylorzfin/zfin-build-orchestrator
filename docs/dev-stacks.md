@@ -324,9 +324,13 @@ nothing but a dump:
 ```bash
 z seed new --db ~/dumps/2026.09.28.1/zfindb.bak --solr ~/dumps/snapshot.2026.09.28-03.00 --tmux
 z seed new                          # the dump and snapshot loaddb/getLatestSolrIndex would pick
-z seed new --tag 2026-09-28 --resume       # carry on after a failed phase
-z seed new --tag 2026-09-28 --clean        # or discard it
+z seed new --resume                 # carry on after a failed phase (--tag T when several are going)
+z seed new --clean                  # or discard it
 ```
+
+Without `--tag`, the seed is named after what it is built from: `<dump>_<snapshot>_<commit>`,
+e.g. `2026.10.26.1_2026.10.27-01.43_b3df0e2`. The same inputs give the same name, so a second
+build with no new dump, snapshot or commit stops at once and says so instead of duplicating.
 
 It runs `z build configure load-db load-solr deploy-jenkins deploy` in a Compose project of
 its own (`seedbuild-<tag>`), then `z seed new --from` against it, then `down -v`. The choices that

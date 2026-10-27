@@ -82,9 +82,10 @@ CI / bootstrap (no activation needed):
 
 Seeds (a loaded stack's volumes, captured once and restored into many):
   z seed new|create [--from P] [--tag T] capture db+solr (+ app tier) from a loaded stack
-  z seed build [--db F] [--solr D] [--tag T]
+  z seed new [--db F] [--solr D] [--tag T]
                                          build a seed from a dump: load + deploy in a
                                          throwaway stack, capture it, tear it down
+                                         (default tag: <dump>_<snapshot>_<commit>)
   z shell-init [bash|zsh]                shell lines to put `z` on PATH + enable completion
   z seed ls / z seed rm <tag>            list / delete seeds
 

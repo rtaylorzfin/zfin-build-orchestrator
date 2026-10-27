@@ -95,6 +95,7 @@ Seeds (a loaded stack's volumes, captured once and restored into many):
   z seed new [--db F] [--solr D] [--tag T]
                                          make a seed from the dumps: load + deploy in a
                                          throwaway stack, capture it, tear it down
+                                         (tag defaults to <dump>_<snapshot>_<commit>)
   z seed new --from <project> [--tag T]  copy a stack -- live (captured) or frozen (linked from
                                          its archive); --with-shared for a --shared-db feature
   z seed restore [<tag>] [--app]         restore a seed into THIS stack (e.g. the base checkout's)

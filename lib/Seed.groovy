@@ -44,7 +44,8 @@
 //
 //   --from PROJECT   Compose project (or feature ticket) to copy. Named, never guessed from the
 //                    working directory: the stack you stand in is often not the loaded one.
-//   --tag TAG        Seed name (default: today, YYYY-MM-DD).
+//   --tag TAG        Seed name (default: today, YYYY-MM-DD; without --from it is
+//                    <dump>_<snapshot>_<commit> -- z seed new --help).
 //   --no-app         Skip the deploy-target volumes. They are small (~0.7G) and without them
 //                    every feature comes up cold, so they are captured by DEFAULT.
 //   --caches         Also capture gradle/maven/npm. Several GB, and regenerable, so OFF by
