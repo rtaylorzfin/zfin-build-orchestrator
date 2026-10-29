@@ -642,7 +642,7 @@ class ZfinUtil {
      *  Parallel because the cost is container startup plus writing many small files, which
      *  overlaps well (raw gzip is ~1s). Per-index result slots, so no contention; output is
      *  printed by the caller after the join, in order, rather than interleaved. */
-    List<Map> restoreVolumes(String project, List<String> vns, File srcDir) {
+    List<Map> restoreVolumes(String project, List<String> vns, File srcDir, Map<String, String> labels = [:]) {
         // Report each volume AS IT LANDS, not all of them afterwards. These run concurrently and
         // the big one (~16G pg_data) takes minutes, so a silent block followed by four lines
         // looked identical to a hang. Order is completion order, which is the useful order --
@@ -685,7 +685,8 @@ class ZfinUtil {
                     run2(['docker', 'rm', '-f', cname])   // clear a stale orphan from an interrupted run
                     def cr = run2(['docker', 'volume', 'create',
                                    '--label', "com.docker.compose.project=$project",
-                                   '--label', "com.docker.compose.volume=$vn", vol])
+                                   '--label', "com.docker.compose.volume=$vn"] +
+                                  labels.collectMany { k, v -> ['--label', "$k=$v"] } + [vol])
                     // No --rm: a --rm container that never STARTS (interrupt) is left "Created"
                     // and pins the volume; name it and remove it explicitly in finally instead.
                     def ex = run2(['docker', 'run', '--name', cname, '-u', '0', '--entrypoint', 'tar',
@@ -795,13 +796,17 @@ class ZfinUtil {
     /** Is `project` a shared data stack `z shared` runs -- its db carries SHARED_DATA_LABEL --
      *  or one that does not exist yet, which `z shared up` may create? False for a real
      *  instance's project, and for a stack made by earlier tooling without the label. Looks at
-     *  stopped containers too, and, with none at all, at whether its pg_data volume exists. */
+     *  stopped containers too, and, with none at all, at its pg_data volume: `z shared up|thaw`
+     *  label that as well, so a stack whose containers were removed (a `docker compose down`,
+     *  or `z shared down` before it only stopped them) with its data kept is still recognised. */
     boolean managedSharedStack(String project) {
         def cid = captureOutput(['docker', 'ps', '-aq', '--filter', "label=com.docker.compose.project=$project",
                                  '--filter', 'label=com.docker.compose.service=db']).readLines().find { it }
         if (cid) return captureOutput(['docker', 'inspect', cid, '--format',
                 "{{index .Config.Labels \"${StackConfig.SHARED_DATA_LABEL}\"}}"]) == 'true'
-        !volumeExists("${project}_pg_data")
+        def vol = "${project}_pg_data"
+        !volumeExists(vol) || captureOutput(['docker', 'volume', 'inspect', vol, '--format',
+                "{{index .Labels \"${StackConfig.SHARED_DATA_LABEL}\"}}"]) == 'true'
     }
 
     /** Running stacks using the shared data stack `sp`: those whose `<project>_default` network

@@ -73,7 +73,12 @@ class SharedStack {
         if (sub in ['up', 'down', 'freeze', 'thaw'] && !zfinUtil.managedSharedStack(project))
             die("'$project' is not a shared stack z manages: its db has no ${StackConfig.SHARED_DATA_LABEL} label.\n" +
                 "   It may be a real instance, or one another dev tree or older tooling runs. Give this tree\n" +
-                "   its own:  z config set ZFIN_SHARED_PROJECT=<name>   (in this tree's zfin-dev.env)")
+                "   its own:  z config set ZFIN_SHARED_PROJECT=<name>   (in this tree's zfin-dev.env)\n" +
+                "   If it IS this tree's, left with data but no containers by an older `z shared down`, its\n" +
+                "   volumes predate the label. Discard them (docker volume rm ${project}_<vol>) and `z shared up`.")
+        // The shared stack's own volumes carry the label too, so the check above still knows
+        // them when no container is left to ask.
+        def sharedLabel = [(StackConfig.SHARED_DATA_LABEL): 'true']
 
         // A feature shares this data by having the shared db connected into its own
         // `<project>_default` network, so the sharers are exactly those networks. One
@@ -112,7 +117,7 @@ class SharedStack {
                         if (!zfinUtil.archiveFileFor(seed, vn)) die("seed '$tag' has no $vn tarball ($seed)")
                     }
                     info("shared data tier is empty -- restoring seed '$tag' (this is the one-time copy)")
-                    def res = zfinUtil.restoreVolumes(project, StackConfig.DATA_VOLS, seed)
+                    def res = zfinUtil.restoreVolumes(project, StackConfig.DATA_VOLS, seed, sharedLabel)
                     def bad = res.findAll { !it.ok }
                     if (bad) die("seed restore failed: ${bad.collect { it.vn }.join(', ')}\n" + bad.collect { it.err }.join('\n'))
                     res.each { r -> info(String.format("restored %s (%.0f MB) in %s", r.vol, r.mb, zfinUtil.dur(r.secs))) }
@@ -141,9 +146,13 @@ class SharedStack {
                 info("attach features with: z feature new <ticket> --shared-db")
                 break
             case 'down':
-                runCommand(compose + ['down'] + (rmData ? ['-v'] : []), [check: false])
+                // Keeping the data STOPS the containers rather than removing them: they carry the
+                // label that marks this stack as z's, and they keep their connections into the
+                // sharers' networks, so the next `z shared up` just starts them again.
+                if (rmData) runCommand(compose + ['down', '-v'], [check: false])
+                else        runCommand(compose + ['stop'], [check: false])
                 info(rmData ? "shared stack down; the shared copy was discarded (-v)"
-                            : "shared stack down; shared copy kept (z shared down --rm-data to discard)")
+                            : "shared stack stopped; shared copy kept (z shared down --rm-data to discard)")
                 break
             case 'status':
                 runCommand(compose + ['ps'], [check: false])
@@ -233,7 +242,7 @@ class SharedStack {
                     die("these shared volumes already exist: ${already.join(', ')}\n" +
                         "   The shared stack is not frozen. `z shared down --rm-data` first to replace it.")
                 info("thaw shared stack  frozen ${sm.frozenAt}  volumes=${svols.join(', ')}")
-                def res = zfinUtil.restoreVolumes(project, svols, dest)
+                def res = zfinUtil.restoreVolumes(project, svols, dest, sharedLabel)
                 def bad = res.findAll { !it.ok }
                 if (bad) die("restore failed: ${bad.collect { it.vn }.join(', ')}\n" + bad.collect { it.err }.join('\n'))
                 runCommand(compose + ['up', '-d'] + StackConfig.DATA_SERVICES)

@@ -505,7 +505,8 @@ main class 172.x`). Postgres/solr don't care about being on several networks, so
 host, so two dev trees on one host should each set their own in their `zfin-dev.env`
 (`z config set ZFIN_SHARED_PROJECT=<name>`), or they would share one stack. The same setting can
 instead point features at a real instance's data. To tell the two apart, the shared overlay
-labels its db and solr `zfin.devstack.shared-data=true`: `z shared up|down|freeze|thaw` refuse a
+labels its db and solr `zfin.devstack.shared-data=true` (and `z shared up|thaw` label the volumes
+they restore, so a stack with data but no containers is still recognised): `z shared up|down|freeze|thaw` refuse a
 project whose db lacks it -- a real instance, or a shared stack another tree or older tooling
 runs -- and `z feature new --shared-db` warns that it is about to write a live database.
 
