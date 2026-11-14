@@ -833,9 +833,14 @@ class Seed {
 
         // Restart exactly what we stopped (leave an already-down stack down), then mark the run
         // complete so the shutdown hook stands down -- the stack is back up from here.
+        // A restart that FAILS does not abort: every tarball is already written, and dying here
+        // would skip the manifest and throw away a finished capture over a problem with the
+        // source stack (seen: its docker/pg_pass bind source gone, so db could not start). The
+        // seed is written regardless, and the failure is reported once it is.
+        def notRestarted = []
         stopped.each { svc, cid ->
             info("restarting ${dataProject == project ? "" : "the shared "}$svc")
-            runCommand(['docker', 'start', cid])
+            if (runCommand(['docker', 'start', cid], [check: false]) != 0) notRestarted << svc
         }
         state.completed = true
         timer.mark('restart source')
@@ -885,6 +890,13 @@ class Seed {
                 def mb = (f?.length() ?: 0L) / 1048576.0
                 println String.format("      %-16s %11s  %8.0f MB  %6.0f MB/s", vn, zfinUtil.dur(vs), mb, vs > 0 ? mb / vs : 0)
             }
+        }
+
+        if (notRestarted) {
+            System.err.println("!! the seed is complete, but ${notRestarted.join(' and ')} of " +
+                               "${dataProject == project ? "'$project'" : "the shared stack '$dataProject'"} did not start again (Docker's error is above).")
+            System.err.println("   Fix that, then:  z up ${notRestarted.join(' ')}")
+            System.exit(1)
         }
     }
 }
