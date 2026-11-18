@@ -36,6 +36,8 @@ services:
       - ${ZFIN_PROXY_CERT_DIR}/zfin.org.key:/etc/nginx/certs/${ZFIN_FEATURE_DOMAIN}.key:ro
       - ${ZFIN_PROXY_CERT_DIR}/zfin.org.crt:/etc/nginx/certs/default.crt:ro
       - ${ZFIN_PROXY_CERT_DIR}/zfin.org.key:/etc/nginx/certs/default.key:ro
+      # Upload size (nginx's 1m default 413s Jenkins file parameters); see the file.
+      - ./proxy/body-size.conf:/etc/nginx/conf.d/zfin-body-size.conf:ro
     networks: [proxy]
 
 networks:

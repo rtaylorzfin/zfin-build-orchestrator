@@ -160,6 +160,10 @@ class StackConfig {
     // Freeze without it discarded a stack's whole Jenkins setup on `down -v`, and thaw could
     // not bring it back.
     static final String JENKINS_VOL = 'jenkins_data'
+    // Where the jenkins container keeps the generated admin password (compose/jenkins/
+    // zfin-security-realm.groovy writes it when JENKINS_ADMIN_PASSWORD is unset). z status shows it.
+    static final String JENKINS_ADMIN_PASSWORD_FILE =
+            '/opt/zfin/www_homes/zfin.org/server_apps/jenkins/jenkins-home/secrets/initialAdminPassword'
     // The zfin-static release `gradle make` downloads (home;static;deployFromRelease), which
     // www_data only SYMLINKS into (home/ZFIN, home/zf_info, ...). A seed without it restores
     // those links pointing into an empty volume, so every feature had to `gradle make` again.

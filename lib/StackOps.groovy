@@ -267,6 +267,18 @@ class StackOps {
                 // so they cost nothing on a healthy stack and are the whole point on a sick one.
                 if (sick)   println "  UNHEALTHY: ${sick*.svc.sort().join(' ')}"
                 if (failed) println "  FAILED   : ${failed.sort { it.svc }.collect { "${it.svc} (${it.status})" }.join(', ')}"
+                // The Jenkins login, which otherwise means `z exec jenkins -c 'cat <long path>'`.
+                // Read straight from the running container (docker exec, not a login shell), and
+                // only when jenkins is up; no file -- a password from JENKINS_ADMIN_PASSWORD, or
+                // OIDC in charge -- prints nothing. "default": the file is what the init script
+                // generated, and stays put if someone changes the password in Jenkins later.
+                if ((up + sick).any { it.svc == 'jenkins' }) {
+                    def jc = zfinUtil.captureOutput(['docker', 'ps', '-q',
+                            '--filter', "label=com.docker.compose.project=${active}",
+                            '--filter', 'label=com.docker.compose.service=jenkins'])?.readLines()?.find { it }
+                    def pw = jc ? zfinUtil.captureOutput(['docker', 'exec', jc, 'cat', StackConfig.JENKINS_ADMIN_PASSWORD_FILE]) : ''
+                    if (pw) println "  jenkins  : default login admin / $pw"
+                }
                 // A shared-data stack has no db/solr of its own -- the overlay suppresses them. One
                 // showing up means something ran compose WITHOUT the overlays (a bare `docker
                 // compose up` in the worktree's docker/), and it is not harmless: it joins this
