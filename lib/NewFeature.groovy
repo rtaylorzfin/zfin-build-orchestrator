@@ -528,10 +528,24 @@ class NewFeature {
 // "Taken" is gathered so we never collide with the base stack, another feature, or whatever is
 // bound right now: offsets recorded in existing stacks' .env, plus any db or httpd port
 // currently published in our ranges, whoever owns it.
+//
+// The scan alone races: this stack's .env is only written in step 2, after the worktree
+// checkout (~30s), so two `z feature new` runs started together both saw the same offset free
+// and the second stack's db failed with "port is already allocated" (seen 2026-11-20). So the
+// offset is also CLAIMED here, atomically: worktrees/.port-claims/<offset>, made with
+// createNewFile(), which exactly one process can win. The claim is released once the .env
+// records the offset; a claim older than an hour is a run that died first and is cleared.
         int offset = 0
+        File portClaim = null
         if (!portOffset) {
             def taken = [0] as Set          // 0 is the base stack's own set; never hand it out
-            (WT_PARENT.listFiles() ?: [] as File[]).findAll { it.isDirectory() }.each { d ->
+            def claimsDir = new File(WT_PARENT, '.port-claims')
+            claimsDir.mkdirs()
+            (claimsDir.listFiles() ?: [] as File[]).each { f ->
+                if (System.currentTimeMillis() - f.lastModified() > 3_600_000L) f.delete()
+                else if (f.name ==~ /\d+/) taken << (f.name as int)
+            }
+            (WT_PARENT.listFiles() ?: [] as File[]).findAll { it.isDirectory() && !it.name.startsWith('.') }.each { d ->
                 def v = zfinUtil.envField(new File(d, 'docker/.env'), 'ZFIN_PORT_OFFSET')
                 if (v ==~ /\d+/) taken << (v as int)
             }
@@ -544,7 +558,14 @@ class NewFeature {
             }
 
             offset = 1
-            while (offset <= 99 && taken.contains(offset)) offset++
+            while (offset <= 99) {
+                if (!taken.contains(offset)) {
+                    def f = new File(claimsDir, "$offset")
+                    if (f.createNewFile()) { f.text = "$name\n"; portClaim = f; break }
+                    taken << offset         // another run claimed it between our scan and now
+                }
+                offset++
+            }
             if (offset > 99) die("no free port offset in [1, 99] (taken: ${taken.sort().join(', ')})")
             def skipped = taken.findAll { it > 0 }.sort()
             info("allocated port offset +$offset" + (skipped ? "  (skipped in use: ${skipped.join(', ')})" : ''))
@@ -612,6 +633,17 @@ class NewFeature {
         if (useExisting) outEnv << "ZFIN_FEATURE_BRANCH_PREEXISTING=1\n"
 
         outEnv << "DOCKER_INSTANCE=${StackConfig.FEATURE_INSTANCE}\n"
+
+        // The .env now records the offset, so the scan in later runs sees it: drop the claim.
+        // Then a backstop for any other path to a duplicate (a hand-edited .env, --port-offset):
+        // fail here, before step 3 spends minutes restoring volumes for a stack that can't start.
+        portClaim?.delete()
+        def dupes = (WT_PARENT.listFiles() ?: [] as File[]).findAll {
+            it.isDirectory() && !it.name.startsWith('.') && it.canonicalPath != wt.canonicalPath &&
+                    zfinUtil.envField(new File(it, 'docker/.env'), 'ZFIN_PORT_OFFSET') == offset.toString()
+        }
+        if (dupes) die("port offset +$offset is also used by ${dupes*.name.join(', ')} -- " +
+                "`z feature rm $name --force`, then retry (or pass --port-offset N)")
 
 // 2b. No per-worktree bundle. The stack's identity lives in its own docker/.env, and its
 //     compose files come from THIS checkout -- so there is nothing to copy, nothing to go
