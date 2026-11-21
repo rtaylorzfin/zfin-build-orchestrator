@@ -74,9 +74,13 @@
 //                   writes/migrations/reindex are shared with every other --shared-db
 //                   feature. Uses docker-compose.overlay-shared-db.yml.
 //   --node          Run the one-time `gradle npmInstall` (npm ci) that populates the
-//                   worktree's node_modules. OFF by default: it costs minutes, and a stack
-//                   restored from a warm seed serves without it. Needed before the first
-//                   `gradle dirtydeploy` (npmBuild -> webpack). (--no-node is the explicit off.)
+//                   worktree's node_modules -- git-ignored, so never in a seed: the seed's
+//                   npm_cache is npm's DOWNLOAD cache (~/.npm), which only makes npm ci fast.
+//                   ON by default when the seed carries that cache (and not --no-caches),
+//                   since npm ci then installs from it; OFF otherwise, where it costs minutes
+//                   of downloads. Needed before the first webpack build (npmBuild,
+//                   dirtydeploy) on branches whose build.gradle does not run npmInstall
+//                   itself. (--no-node is the explicit off.)
 //   --deploy        After bringing the stack up, run `gradle dirtydeploy` so the app tier
 //                   serves THIS branch instead of the snapshot's. Only meaningful with a warm
 //                   app tier (a cold one needs the full first build -- see the next: block).
@@ -120,7 +124,7 @@ class NewFeature {
         def doCaches = true
         def doSharedDb = false
         def portOffset = null    // --port-offset; auto-allocated when unset
-        def doNode = false    // opt-in: several minutes, and most first sessions do not deploy
+        def doNode = false    // default decided once the seed is: see npmWarm below
         def doDeploy = false
         def doLiquibase = false
         def doTmux = false
@@ -224,6 +228,11 @@ class NewFeature {
 // only makes sense on top of a warm snapshot, and the boot prompt names the services it'll
 // actually start. Takes the tag as a parameter since the tag is still being decided.
         def haveTars = { String t, List vns -> t && vns.every { new File(zfinUtil.seedDir(t), "${it}.tgz").isFile() } }
+        // npm ci's default: on when the seed's npm download cache will be restored, so it
+        // installs from local tarballs instead of the network. node_modules itself lives in the
+        // worktree (git-ignored, bind-mounted), so no seed can carry it -- without this, a fresh
+        // stack from a seed with caches still fails its first webpack build: `webpack: not found`.
+        def npmWarm = { String t -> doCaches && haveTars(t, ['npm_cache']) }
 
 // The interactive plan. A <name> on the command line does not suppress the prompts:
 // provisioning has enough knobs -- where the data comes from, whether to boot, whether to
@@ -295,7 +304,8 @@ class NewFeature {
                                       : (warmPeek ? 'db+solr+tomcat+httpd' : 'db+solr')
             if (!('up' in explicit)) doUp = askYesNo(con, "  bring the stack up now ($bootDesc)?", true)
             if (!('node' in explicit))
-                doNode = askYesNo(con, "  run npm ci now (gradle npmInstall; once per worktree, needed before dirtydeploy)?", false)
+                doNode = askYesNo(con, "  run npm ci now (gradle npmInstall; once per worktree, needed before dirtydeploy)" +
+                        (npmWarm(tag) ? " -- from the seed's npm cache" : "") + "?", npmWarm(tag))
             // dirtydeploy is only offered against a warm app tier -- with a cold one the first
             // deploy is the full ant/gradle sequence in the next: block, not this task.
             // Default follows the npm answer. dirtydeploy runs npmBuild WITHOUT npmInstall, and
@@ -315,6 +325,8 @@ class NewFeature {
         } else if (inWorktree && !baseArg && !useExisting) {
             System.err.println("!! note: invoked from worktree '${new File(cwdTop).name}' (branch $cwdBranch) -- basing the new feature on '$base' off the primary checkout (pass --base to override)")
         }
+        // -y / no TTY takes the defaults, and npm ci's is the same one the prompt offers.
+        if (!interactive && !('node' in explicit)) doNode = npmWarm(tag)
 
         // No hard requirement here: a --shared-db stack needs no seed at all, and the
         // own-data path checks for one itself (below) before anything has been created.
