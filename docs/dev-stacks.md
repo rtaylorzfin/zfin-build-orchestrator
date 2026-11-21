@@ -17,10 +17,11 @@ This tooling is opt-in and lives in its own checkout, beside your ZFIN checkouts
 inside one. Install it once per host:
 
 ```bash
-cd ~/zfin-dev
+sudo mkdir -p /opt/zfin/source_roots/features && sudo chown "$USER" /opt/zfin/source_roots/features
+cd /opt/zfin/source_roots/features
 git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git orchestrator
 eval "$(./orchestrator/z shell-init)"    # z on PATH + tab completion, for this shell
-z scaffold --root ~/zfin-dev             # the dev tree, and offers to clone ZFIN into worktrees/main
+z scaffold --root /opt/zfin/source_roots/features  # the dev tree, and offers to clone ZFIN into worktrees/main
 ```
 
 `eval` sets up the current shell only, so run it in each new shell, or append the same output

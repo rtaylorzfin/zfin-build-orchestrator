@@ -11,7 +11,7 @@ somewhere unexpected rather than an error.
 Create it with:
 
 ```bash
-z scaffold --root ~/zfin-dev      # or just `z scaffold` from inside an existing tree
+z scaffold --root /opt/zfin/source_roots/features  # or just `z scaffold` from inside an existing tree
 ```
 
 It creates what is missing and never clobbers, so it is safe to re-run on a partially
@@ -31,7 +31,7 @@ Run `z` with no tree to be found and, on a terminal, it offers to create one.
 ## Recommended structure
 
 ```
-$ZFIN_DEV_ROOT/                  e.g. ~/zfin-dev  or  /opt/zfin-dev
+$ZFIN_DEV_ROOT/                  e.g. /opt/zfin/source_roots/features
 ├── zfin-dev.env                 marks the tree; its settings (z config)
 ├── orchestrator/                this tooling, cloned by you; one install serves the host
 ├── worktrees/                   every ZFIN checkout, side by side

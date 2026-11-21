@@ -10,10 +10,11 @@ healthchecks); nothing in it requires this tooling.
 Groovy only, run on the host. Needs `groovy`, Docker with Compose v2, and git.
 
 ```bash
-cd ~/zfin-dev
+sudo mkdir -p /opt/zfin/source_roots/features && sudo chown "$USER" /opt/zfin/source_roots/features
+cd /opt/zfin/source_roots/features
 git clone git@github.com:rtaylorzfin/zfin-build-orchestrator.git orchestrator
 eval "$(./orchestrator/z shell-init)"      # z on PATH + tab completion, for this shell
-z scaffold --root ~/zfin-dev             # the dev tree; offers to clone ZFIN into worktrees/main
+z scaffold --root /opt/zfin/source_roots/features  # the dev tree; offers to clone ZFIN into worktrees/main
 ```
 
 `eval` sets up the current shell only. To have `z` in every shell, append the same output to

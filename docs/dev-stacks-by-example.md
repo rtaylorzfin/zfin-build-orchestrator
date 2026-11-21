@@ -12,9 +12,9 @@ marks elided output.
 ## 1. The tree, and the front door
 
 ```console
-14:47:47 ryan@mac:.../source_roots/stacks$ pwd
-/opt/zfin/source_roots/stacks
-14:47:48 ryan@mac:.../source_roots/stacks$ tree -L 2
+14:47:47 ryan@mac:.../source_roots/features$ pwd
+/opt/zfin/source_roots/features
+14:47:48 ryan@mac:.../source_roots/features$ tree -L 2
 .
 ├── archive
 │   ├── seeds
@@ -41,8 +41,8 @@ marks elided output.
     └── zfin-10510
 
 26 directories, 1 file
-14:47:52 ryan@mac:.../source_roots/stacks$ z config get ZFIN_DEV_ROOT
-/opt/zfin/source_roots/stacks
+14:47:52 ryan@mac:.../source_roots/features$ z config get ZFIN_DEV_ROOT
+/opt/zfin/source_roots/features
 ```
 
 ```console
@@ -103,11 +103,11 @@ stack here: zfin_org
 ### Putting `z` on PATH
 
 ```console
-14:49:02 ryan@mac:.../stacks$ orchestrator/z shell-init
+14:49:02 ryan@mac:.../features$ orchestrator/z shell-init
 # ZFIN dev-stack tooling. These lines are shell -- run them, or keep them:
 #
-#   eval "$(/opt/zfin/source_roots/stacks/orchestrator/z shell-init)"        # this shell only
-#   /opt/zfin/source_roots/stacks/orchestrator/z shell-init >> ~/.bashrc     # and every shell after
+#   eval "$(/opt/zfin/source_roots/features/orchestrator/z shell-init)"        # this shell only
+#   /opt/zfin/source_roots/features/orchestrator/z shell-init >> ~/.bashrc     # and every shell after
 #
 # `z` then works from any directory. There is nothing to activate per stack: it asks
 # git which checkout owns your working directory, so one copy on PATH serves every
@@ -115,13 +115,13 @@ stack here: zfin_org
 
 # Prepended only if absent, so this is safe to eval twice and safe in an rc file that
 # something else also sources. POSIX `case`, so bash and zsh behave the same.
-case ":$PATH:" in *":/opt/zfin/source_roots/stacks/orchestrator:"*) ;; *) export PATH="/opt/zfin/source_roots/stacks/orchestrator:$PATH" ;; esac
+case ":$PATH:" in *":/opt/zfin/source_roots/features/orchestrator:"*) ;; *) export PATH="/opt/zfin/source_roots/features/orchestrator:$PATH" ;; esac
 
 # Tab completion: subcommands, service names, and each subcommand's flags.
-source "/opt/zfin/source_roots/stacks/orchestrator/lib/z-completion.bash"
-14:49:10 ryan@mac:.../stacks$ eval "$(./orchestrator/z shell-init)"
+source "/opt/zfin/source_roots/features/orchestrator/lib/z-completion.bash"
+14:49:10 ryan@mac:.../features$ eval "$(./orchestrator/z shell-init)"
 14:49:12 ryan@mac:.../worktrees/main$ type z
-z is /opt/zfin/source_roots/stacks/orchestrator/z
+z is /opt/zfin/source_roots/features/orchestrator/z
 14:49:15 ryan@mac:.../worktrees/main$ z <TAB><TAB>
 build          exec           help           pull           run            seed           shell-init     stop
 down           feature        log            restart        scaffold       shared         status         up
@@ -135,14 +135,14 @@ freeze   ls       new      refresh  rm       session  thaw
 ### A new machine: `z scaffold`
 
 ```console
-09:02:11 ryan@laptop:~/zfin-dev/worktrees/main$ z feature ls
+09:02:11 ryan@laptop:.../worktrees/main$ z feature ls
 No dev tree found at or above here. A dev tree is the directory holding this tooling's
 worktrees, archives and caches (docs/dev-tree-layout.md), marked by a zfin-dev.env file.
-Create one at [/Users/ryan/zfin-dev]:
->> created /Users/ryan/zfin-dev/zfin-dev.env
-no feature worktrees under /Users/ryan/zfin-dev/worktrees
-09:02:30 ryan@laptop:~/zfin-dev/worktrees/main$ z scaffold
->> dev tree root: /Users/ryan/zfin-dev
+Create one at [/opt/zfin/source_roots/features]:
+>> created /opt/zfin/source_roots/features/zfin-dev.env
+no feature worktrees under /opt/zfin/source_roots/features/worktrees
+09:02:30 ryan@laptop:.../worktrees/main$ z scaffold
+>> dev tree root: /opt/zfin/source_roots/features
   created  worktrees
   created  archive
   created  archive/sessions
@@ -158,22 +158,22 @@ no feature worktrees under /Users/ryan/zfin-dev/worktrees
   created  mounts/gff3
   created  mounts/hh_atlas
 
->> already a dev tree (/Users/ryan/zfin-dev/zfin-dev.env)
+>> already a dev tree (/opt/zfin/source_roots/features/zfin-dev.env)
 
 >> mounts/ is empty scaffolding. Point the DOCKER_*_PATH vars at it in docker/.env,
 >> or leave them at whatever this host already uses -- those paths are often shared
 >> with other tooling rather than owned by this tree. See docs/dev-tree-layout.md.
-09:02:41 ryan@laptop:~/zfin-dev/worktrees/main$ z config
-tree file: /Users/ryan/zfin-dev/zfin-dev.env
-  ZFIN_DEV_ROOT           /Users/ryan/zfin-dev  [tree]
+09:02:41 ryan@laptop:.../worktrees/main$ z config
+tree file: /opt/zfin/source_roots/features/zfin-dev.env
+  ZFIN_DEV_ROOT           /opt/zfin/source_roots/features  [tree]
                             the dev tree: where zfin-dev.env is, found by walking up (or exported, from outside one)
   ZFIN_WORKTREES_DIR      -
                             feature worktrees (default: $ZFIN_DEV_ROOT/worktrees)
   ZFIN_ARCHIVE_DIR        -
                             freeze archives, seeds, session history (default: $ZFIN_DEV_ROOT/archive)
   ...
-09:02:50 ryan@laptop:~/zfin-dev/worktrees/main$ z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
->> ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive  -> /Users/ryan/zfin-dev/zfin-dev.env
+09:02:50 ryan@laptop:.../worktrees/main$ z config set ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive
+>> ZFIN_ARCHIVE_DIR=/Volumes/backup/zfin-archive  -> /opt/zfin/source_roots/features/zfin-dev.env
 ```
 
 ---
@@ -185,7 +185,7 @@ tree file: /Users/ryan/zfin-dev/zfin-dev.env
 >> targeting 'zfin_org' (base)
 stack: zfin_org
   url      : https://zfin.org
-  dir      : /opt/zfin/source_roots/stacks/worktrees/main
+  dir      : /opt/zfin/source_roots/features/worktrees/main
   branch   : main
   jira     : https://zfin.atlassian.net/browse/main
   pr       : https://github.com/rtaylorzfin/zfin/pull/new/main
@@ -249,7 +249,7 @@ ngproxy_net
 >> docker compose --project-name zfin-3001 ... -f .../docker-compose.overlay-feature.yml -f .../docker-compose.overlay-proxy-network.yml up -d db solr tomcat httpd
 ...
 >> provisioned zfin-3001
-     worktree : /opt/zfin/source_roots/stacks/worktrees/zfin-3001
+     worktree : /opt/zfin/source_roots/features/worktrees/zfin-3001
      branch   : zfin-3001  (off main)
      project  : zfin-3001
      url      : https://zfin-3001.review.zfin.test   (direct: https://127.0.0.1:8452)
@@ -282,7 +282,7 @@ stack: zfin-3001
 # `z seed create` resolves the stack from the working directory like any stack op; --from overrides.
 09:13:20 ryan@mac:.../worktrees/main$ z seed create --from zfin-10510 --caches
 >> targeting 'zfin_org' (base)
->> seed create: from=zfin-10510 release=main tag=2026-09-29 -> /opt/zfin/source_roots/stacks/seeds/2026-09-29
+>> seed create: from=zfin-10510 release=main tag=2026-09-29 -> /opt/zfin/source_roots/features/seeds/2026-09-29
 >> stopping db (a41c9e07b2d3) for a consistent capture
 a41c9e07b2d3
 >> stopping solr (6be2f0c8d915) for a consistent capture
@@ -292,21 +292,21 @@ a41c9e07b2d3
 seed-trim-48213
 >> [trim] pg_resetwal to shed recycled WAL segments (safe after the clean shutdown above)
 Write-ahead log reset
->> capturing zfin-10510_pg_data -> /opt/zfin/source_roots/stacks/seeds/2026-09-29/pg_data.tgz (pigz -1)
->> capturing zfin-10510_solr_var -> /opt/zfin/source_roots/stacks/seeds/2026-09-29/solr_var.tgz (pigz -1)
->> capturing zfin-10510_www_data -> /opt/zfin/source_roots/stacks/seeds/2026-09-29/www_data.tgz (pigz -1)
->> capturing zfin-10510_catalina_base -> /opt/zfin/source_roots/stacks/seeds/2026-09-29/catalina_base.tgz (pigz -1)
->> capturing zfin-10510_keystore -> /opt/zfin/source_roots/stacks/seeds/2026-09-29/keystore.tgz (pigz -1)
->> capturing zfin-10510_tls_certs -> /opt/zfin/source_roots/stacks/seeds/2026-09-29/tls_certs.tgz (pigz -1)
->> capturing zfin-10510_jenkins_data -> /opt/zfin/source_roots/stacks/seeds/2026-09-29/jenkins_data.tgz (pigz -1)
->> capturing zfin-10510_gradle_cache -> /opt/zfin/source_roots/stacks/seeds/2026-09-29/gradle_cache.tgz (pigz -1)
->> capturing zfin-10510_maven_cache -> /opt/zfin/source_roots/stacks/seeds/2026-09-29/maven_cache.tgz (pigz -1)
->> capturing zfin-10510_npm_cache -> /opt/zfin/source_roots/stacks/seeds/2026-09-29/npm_cache.tgz (pigz -1)
+>> capturing zfin-10510_pg_data -> /opt/zfin/source_roots/features/seeds/2026-09-29/pg_data.tgz (pigz -1)
+>> capturing zfin-10510_solr_var -> /opt/zfin/source_roots/features/seeds/2026-09-29/solr_var.tgz (pigz -1)
+>> capturing zfin-10510_www_data -> /opt/zfin/source_roots/features/seeds/2026-09-29/www_data.tgz (pigz -1)
+>> capturing zfin-10510_catalina_base -> /opt/zfin/source_roots/features/seeds/2026-09-29/catalina_base.tgz (pigz -1)
+>> capturing zfin-10510_keystore -> /opt/zfin/source_roots/features/seeds/2026-09-29/keystore.tgz (pigz -1)
+>> capturing zfin-10510_tls_certs -> /opt/zfin/source_roots/features/seeds/2026-09-29/tls_certs.tgz (pigz -1)
+>> capturing zfin-10510_jenkins_data -> /opt/zfin/source_roots/features/seeds/2026-09-29/jenkins_data.tgz (pigz -1)
+>> capturing zfin-10510_gradle_cache -> /opt/zfin/source_roots/features/seeds/2026-09-29/gradle_cache.tgz (pigz -1)
+>> capturing zfin-10510_maven_cache -> /opt/zfin/source_roots/features/seeds/2026-09-29/maven_cache.tgz (pigz -1)
+>> capturing zfin-10510_npm_cache -> /opt/zfin/source_roots/features/seeds/2026-09-29/npm_cache.tgz (pigz -1)
 >> restarting db
 a41c9e07b2d3
 >> restarting solr
 6be2f0c8d915
->> seed '2026-09-29' written: 8.9G across 10 volume(s) -> /opt/zfin/source_roots/stacks/seeds/2026-09-29
+>> seed '2026-09-29' written: 8.9G across 10 volume(s) -> /opt/zfin/source_roots/features/seeds/2026-09-29
 >> use it with:  z feature new <ticket> --seed 2026-09-29
 
   seed '2026-09-29' timing
@@ -338,15 +338,15 @@ TAG                    SIZE  CREATED             VOLUMES
 2026-09-29             8.9G  2026-09-29 09:18:02 pg_data solr_var www_data catalina_base keystore tls_certs jenkins_data gradle_cache maven_cache npm_cache
 mactest                6.5G  2026-09-18 14:39:32 pg_data solr_var www_data
 
-in /opt/zfin/source_roots/stacks/seeds -- use one with:  z feature new <ticket> --seed <tag>
+in /opt/zfin/source_roots/features/seeds -- use one with:  z feature new <ticket> --seed <tag>
 09:18:52 ryan@mac:.../worktrees/main$ z seed rm mactest
 >> targeting 'zfin_org' (base)
-delete seed 'mactest' (6.5G) from /opt/zfin/source_roots/stacks/seeds/mactest? [y/N]: y
+delete seed 'mactest' (6.5G) from /opt/zfin/source_roots/features/seeds/mactest? [y/N]: y
 >> deleted seed 'mactest' (6.5G)
 09:19:03 ryan@mac:.../worktrees/main$ z seed create --tag 2026-09-24
 >> targeting 'zfin_org' (base)
->> seed create: from=zfin_org release=main tag=2026-09-24 -> /opt/zfin/source_roots/stacks/seeds/2026-09-24
-!! seed '2026-09-24' already exists at /opt/zfin/source_roots/stacks/seeds/2026-09-24
+>> seed create: from=zfin_org release=main tag=2026-09-24 -> /opt/zfin/source_roots/features/seeds/2026-09-24
+!! seed '2026-09-24' already exists at /opt/zfin/source_roots/features/seeds/2026-09-24
    Pick another --tag, or remove it:  z seed rm 2026-09-24
 09:19:20 ryan@mac:.../worktrees/main$ head -20 ../../seeds/2026-09-29/seed.json
 {
@@ -375,10 +375,10 @@ delete seed 'mactest' (6.5G) from /opt/zfin/source_roots/stacks/seeds/mactest? [
 # Captured from a data-only project: the seed works, but its stacks cannot serve until built.
 09:40:11 ryan@mac:.../worktrees/main$ z seed create --from zfin_shared --tag shared-only
 >> targeting 'zfin_org' (base)
->> seed create: from=zfin_shared release=main tag=shared-only -> /opt/zfin/source_roots/stacks/seeds/shared-only
+>> seed create: from=zfin_shared release=main tag=shared-only -> /opt/zfin/source_roots/features/seeds/shared-only
 >> note: --app skipping absent volumes: www_data, catalina_base, keystore, tls_certs
 ...
->> seed 'shared-only' written: 6.6G across 2 volume(s) -> /opt/zfin/source_roots/stacks/seeds/shared-only
+>> seed 'shared-only' written: 6.6G across 2 volume(s) -> /opt/zfin/source_roots/features/seeds/shared-only
 >> use it with:  z feature new <ticket> --seed shared-only
 !! this seed has no usable app tier (www_data, catalina_base empty or absent).
    Stacks made from it come up with db+solr only: httpd cannot start until
@@ -407,7 +407,7 @@ delete seed 'mactest' (6.5G) from /opt/zfin/source_roots/stacks/seeds/mactest? [
 >> checksumming zfindb.bak (recorded in the seed's manifest)
 Preparing worktree (detached HEAD 15984f0b5d)
 HEAD is now at 15984f0b5d ZFIN-10461: reproduce Load-NCBI-GFF3-File's real DB effects without the job (#2012)
->> instance: feature   env: /opt/zfin/source_roots/stacks/cache/seed-build/2026-09-29/stack.env
+>> instance: feature   env: /opt/zfin/source_roots/features/cache/seed-build/2026-09-29/stack.env
 
 >> seed build [1/6] configure
 >> stack=seedbuild-2026-09-29  phases=configure
@@ -446,7 +446,7 @@ BUILD FAILED in 4m 12s
 
 !! seed build '2026-09-29' stopped during deploy.
    The build stack is left as it was, so you can look at it, e.g.:
-     COMPOSE_PROJECT_NAME=seedbuild-2026-09-29 COMPOSE_FILE=/opt/zfin/source_roots/stacks/worktrees/main/docker/docker-compose.yml COMPOSE_ENV_FILES=/opt/zfin/source_roots/stacks/cache/seed-build/2026-09-29/stack.env z log tomcat
+     COMPOSE_PROJECT_NAME=seedbuild-2026-09-29 COMPOSE_FILE=/opt/zfin/source_roots/features/worktrees/main/docker/docker-compose.yml COMPOSE_ENV_FILES=/opt/zfin/source_roots/features/cache/seed-build/2026-09-29/stack.env z log tomcat
    carry on from deploy:  z seed build --tag 2026-09-29 --resume
    or discard it:        z seed build --tag 2026-09-29 --clean
 ```
@@ -465,15 +465,15 @@ BUILD FAILED in 4m 12s
 >> done: deploy
 
 >> seed build [6/6] capture seed '2026-09-29'
->> seed create: from=seedbuild-2026-09-29 release=main tag=2026-09-29 -> /opt/zfin/source_roots/stacks/seeds/2026-09-29
+>> seed create: from=seedbuild-2026-09-29 release=main tag=2026-09-29 -> /opt/zfin/source_roots/features/seeds/2026-09-29
 ...
->> seed '2026-09-29' written: 7.2G across 7 volume(s) -> /opt/zfin/source_roots/stacks/seeds/2026-09-29
+>> seed '2026-09-29' written: 7.2G across 7 volume(s) -> /opt/zfin/source_roots/features/seeds/2026-09-29
 >> use it with:  z feature new <ticket> --seed 2026-09-29
 ...
 >> down -v the build stack 'seedbuild-2026-09-29'
 [+] down 12/12
 ...
->> removing the build worktree /opt/zfin/source_roots/stacks/cache/seed-build/2026-09-29/seedbuild-2026-09-29
+>> removing the build worktree /opt/zfin/source_roots/features/cache/seed-build/2026-09-29/seedbuild-2026-09-29
 >> seed '2026-09-29' is ready:  z feature new <ticket> --seed 2026-09-29
 
   seed build '2026-09-29' timing
@@ -504,12 +504,12 @@ BUILD FAILED in 4m 12s
 21:31:20 ryan@mac:.../worktrees/main$ z feature new zfin-2020 -y --seed vm-2026-09-29
 !! seed 'vm-2026-09-29' holds a linux/amd64 PostgreSQL data directory; this host's db image is linux/arm64.
 ...
-21:32:00 ryan@mac:.../worktrees/main$ rsync -a ../../seeds/vm-2026-09-29 cell:/opt/zfin-dev/seeds/
+21:32:00 ryan@mac:.../worktrees/main$ rsync -a ../../seeds/vm-2026-09-29 cell:/opt/zfin/source_roots/features/seeds/
 ```
 
 ```console
 19:50:00 ryan@mac:.../worktrees/main$ z seed build --tag 2026-09-29
-!! seed '2026-09-29' already exists at /opt/zfin/source_roots/stacks/seeds/2026-09-29
+!! seed '2026-09-29' already exists at /opt/zfin/source_roots/features/seeds/2026-09-29
    Pick another --tag, or remove it:  z seed rm 2026-09-29
 19:50:12 ryan@mac:.../worktrees/main$ z seed build --tag next --solr ~/dumps/v9
 !! --solr /Users/ryan/dumps/v9: expected a Solr 9 snapshot.* directory (what `gradle getsolr` fetches)
@@ -568,8 +568,8 @@ New feature stack -- press Enter to accept [defaults].
   apply this branch's schema deltas (gradle liquibasePostBuild)? [y/N]:
   spawn a tmux session 'zfin-12345' in the worktree? [Y/n]:
 >> seed: 2026-09-29
->> warm app tier: yes (from /opt/zfin/source_roots/stacks/seeds/2026-09-29)
->> warm build caches: yes (gradle + maven + npm, from /opt/zfin/source_roots/stacks/seeds/2026-09-29)
+>> warm app tier: yes (from /opt/zfin/source_roots/features/seeds/2026-09-29)
+>> warm build caches: yes (gradle + maven + npm, from /opt/zfin/source_roots/features/seeds/2026-09-29)
 >> plan: worktree + branch  ->  per-feature .env  ->  restore volumes from seed  ->  npm ci  ->  start db solr tomcat httpd  ->  gradle dirtydeploy  ->  tmux session 'zfin-12345'
 >> allocated port offset +5  (skipped in use: 1, 2, 3, 4)
 >> reach it at: https://127.0.0.1:8448
@@ -604,7 +604,7 @@ HEAD is now at 15984f0b5d ZFIN-10461: reproduce Load-NCBI-GFF3-File's real DB ef
 BUILD SUCCESSFUL in 1m 52s
 
 >> [5/7] start db solr tomcat httpd
->> docker compose --project-name zfin-12345 --env-file /opt/zfin/source_roots/stacks/worktrees/zfin-12345/docker/.env -f /opt/zfin/source_roots/stacks/worktrees/main/docker/docker-compose.yml -f /opt/zfin/source_roots/stacks/orchestrator/compose/docker-compose.overlay-feature.yml -f /opt/zfin/source_roots/stacks/orchestrator/compose/docker-compose.overlay-worktree.yml up -d db solr tomcat httpd
+>> docker compose --project-name zfin-12345 --env-file /opt/zfin/source_roots/features/worktrees/zfin-12345/docker/.env -f /opt/zfin/source_roots/features/worktrees/main/docker/docker-compose.yml -f /opt/zfin/source_roots/features/orchestrator/compose/docker-compose.overlay-feature.yml -f /opt/zfin/source_roots/features/orchestrator/compose/docker-compose.overlay-worktree.yml up -d db solr tomcat httpd
 [+] up 4/4
  ✔ Container zfin-12345-db-1      Healthy    13.8s
  ✔ Container zfin-12345-solr-1    Started     0.9s
@@ -616,16 +616,16 @@ BUILD SUCCESSFUL in 1m 52s
 BUILD SUCCESSFUL in 2m 37s
 
 >> [7/7] tmux session 'zfin-12345'
->> tmux session 'zfin-12345' ready: cwd /opt/zfin/source_roots/stacks/worktrees/zfin-12345 (z resolves this stack from here)
+>> tmux session 'zfin-12345' ready: cwd /opt/zfin/source_roots/features/worktrees/zfin-12345 (z resolves this stack from here)
 
 >> provisioned zfin-12345
-     worktree : /opt/zfin/source_roots/stacks/worktrees/zfin-12345
+     worktree : /opt/zfin/source_roots/features/worktrees/zfin-12345
      branch   : zfin-12345  (off main)
      project  : zfin-12345
      url      : https://127.0.0.1:8448
      ports    : https 127.0.0.1:8448   http 127.0.0.1:8085   db 127.0.0.1:5437   debug 127.0.0.1:5005   jenkins 127.0.0.1:9504
      data     : own copy, restored from seed '2026-09-29'  + warm app tier
-     use      : cd /opt/zfin/source_roots/stacks/worktrees/zfin-12345   (z commands there resolve to 'zfin-12345')
+     use      : cd /opt/zfin/source_roots/features/worktrees/zfin-12345   (z commands there resolve to 'zfin-12345')
      tmux     : tmux attach -t zfin-12345   (session left running; Ctrl-b d to detach)
      ran      : npm ci  ->  up db+solr+tomcat+httpd  ->  dirtydeploy
 
@@ -643,7 +643,7 @@ teardown:
   # ...or by hand:
   z stop                             # just pause it: containers stopped, data kept (z up resumes)
   z down -v                          # remove containers + THIS stack's DB/Solr/app copy
-  git worktree remove /opt/zfin/source_roots/stacks/worktrees/zfin-12345
+  git worktree remove /opt/zfin/source_roots/features/worktrees/zfin-12345
   tmux kill-session -t zfin-12345           # drop this feature's shell
 
 >> attaching to 'zfin-12345' (Ctrl-b d to detach; the stack keeps running)
@@ -655,7 +655,7 @@ teardown:
 >> targeting 'zfin-12345' (zfin-12345)
 stack: zfin-12345
   url      : https://127.0.0.1:8448
-  dir      : /opt/zfin/source_roots/stacks/worktrees/zfin-12345
+  dir      : /opt/zfin/source_roots/features/worktrees/zfin-12345
   branch   : zfin-12345
   jira     : https://zfin.atlassian.net/browse/zfin-12345
   pr       : https://github.com/rtaylorzfin/zfin/pull/new/zfin-12345
@@ -666,7 +666,7 @@ stack: zfin-12345
 14:47:31 ryan@mac:.../worktrees/zfin-12345$ sed -n '/added by new-feature/,$p' docker/.env
 # --- added by new-feature.groovy for zfin-12345 ---
 COMPOSE_PROJECT_NAME=zfin-12345
-DOCKER_SOURCE_ROOTS_PATH=/opt/zfin/source_roots/stacks/worktrees/zfin-12345
+DOCKER_SOURCE_ROOTS_PATH=/opt/zfin/source_roots/features/worktrees/zfin-12345
 DOCKER_VIRTUAL_HOST=zfin-12345.review.zfin.test
 ZFIN_PORT_OFFSET=5
 DOCKER_DB_PORT=127.0.0.1:5437
@@ -677,8 +677,8 @@ DOCKER_HTTPD_HTTPS_PORT=127.0.0.1:8448
 # feature stack -- see StackConfig.featureEnv (z feature refresh backfills these)
 DOCKER_SOLR_MEM_LIMIT=6g
 DOCKER_SOLR_HEAP=4g
-DOCKER_GIT_COMMON_DIR=/opt/zfin/source_roots/stacks/worktrees/main/.git
-DOCKER_GIT_WORKTREE_DIR=/opt/zfin/source_roots/stacks/worktrees/main/.git/worktrees/zfin-12345
+DOCKER_GIT_COMMON_DIR=/opt/zfin/source_roots/features/worktrees/main/.git
+DOCKER_GIT_WORKTREE_DIR=/opt/zfin/source_roots/features/worktrees/main/.git/worktrees/zfin-12345
 DOCKER_INSTANCE=feature
 ZFIN_COMPOSE_OVERLAYS=docker-compose.overlay-feature.yml
 ZFIN_SEED=2026-09-29
@@ -721,14 +721,14 @@ tomcat-1  | 29-Sep-2026 14:54:52.311 INFO [main] org.apache.catalina.startup.Cat
 >> targeting 'zfin-12345' (zfin-12345)
 stack: zfin-12345
   url      : https://127.0.0.1:8448
-  dir      : /opt/zfin/source_roots/stacks/worktrees/zfin-12345
+  dir      : /opt/zfin/source_roots/features/worktrees/zfin-12345
   branch   : zfin-12345
   ports    : https 127.0.0.1:8448   db 127.0.0.1:5437   debug 127.0.0.1:5005   jenkins 127.0.0.1:9504
   jira     : https://zfin.atlassian.net/browse/zfin-12345
   pr       : https://github.com/rtaylorzfin/zfin/pull/new/zfin-12345
   seed     : 2026-09-29
-  compose  : /opt/zfin/source_roots/stacks/worktrees/main/docker/docker-compose.yml:/opt/zfin/source_roots/stacks/orchestrator/compose/docker-compose.overlay-feature.yml:/opt/zfin/source_roots/stacks/orchestrator/compose/docker-compose.overlay-worktree.yml
-  env-file : /opt/zfin/source_roots/stacks/worktrees/zfin-12345/docker/.env
+  compose  : /opt/zfin/source_roots/features/worktrees/main/docker/docker-compose.yml:/opt/zfin/source_roots/features/orchestrator/compose/docker-compose.overlay-feature.yml:/opt/zfin/source_roots/features/orchestrator/compose/docker-compose.overlay-worktree.yml
+  env-file : /opt/zfin/source_roots/features/worktrees/zfin-12345/docker/.env
   running  : db httpd solr tomcat
 
 containers:
@@ -770,8 +770,8 @@ stack: zfin-12345
 # -y takes the defaults; flags pin the rest. The ticket is lowercased for the project, not the branch.
 15:10:00 ryan@mac:.../worktrees/main$ z feature new ZFIN-2001 -y --up
 >> seed: 2026-09-29
->> warm app tier: yes (from /opt/zfin/source_roots/stacks/seeds/2026-09-29)
->> warm build caches: yes (gradle + maven + npm, from /opt/zfin/source_roots/stacks/seeds/2026-09-29)
+>> warm app tier: yes (from /opt/zfin/source_roots/features/seeds/2026-09-29)
+>> warm build caches: yes (gradle + maven + npm, from /opt/zfin/source_roots/features/seeds/2026-09-29)
 >> plan: worktree + branch  ->  per-feature .env  ->  restore volumes from seed  ->  start db solr tomcat httpd
 >> allocated port offset +6  (skipped in use: 1, 2, 3, 4, 5)
 >> reach it at: https://127.0.0.1:8449
@@ -795,17 +795,17 @@ Preparing worktree (new branch 'ZFIN-2001')
 ...
 
 >> provisioned ZFIN-2001
-     worktree : /opt/zfin/source_roots/stacks/worktrees/zfin-2001
+     worktree : /opt/zfin/source_roots/features/worktrees/zfin-2001
      branch   : ZFIN-2001  (off main)
      project  : zfin-2001
      url      : https://127.0.0.1:8449
      ports    : https 127.0.0.1:8449   http 127.0.0.1:8086   db 127.0.0.1:5438   debug 127.0.0.1:5006   jenkins 127.0.0.1:9505
      data     : own copy, restored from seed '2026-09-29'  + warm app tier
-     use      : cd /opt/zfin/source_roots/stacks/worktrees/zfin-2001   (z commands there resolve to 'zfin-2001')
+     use      : cd /opt/zfin/source_roots/features/worktrees/zfin-2001   (z commands there resolve to 'zfin-2001')
      ran      : up db+solr+tomcat+httpd
 
 next:
-  cd /opt/zfin/source_roots/stacks/worktrees/zfin-2001                           # z commands resolve to 'zfin-2001' from here
+  cd /opt/zfin/source_roots/features/worktrees/zfin-2001                           # z commands resolve to 'zfin-2001' from here
   # db+solr+tomcat+httpd already up -- serving main's deploy at https://127.0.0.1:8449
   # the app tier is already serving main's code from the warm snapshot.
   # Deploy THIS branch's changes on top (fast, incremental):
@@ -818,7 +818,7 @@ teardown:
   # ...or by hand:
   z stop                             # just pause it: containers stopped, data kept (z up resumes)
   z down -v                          # remove containers + THIS stack's DB/Solr/app copy
-  git worktree remove /opt/zfin/source_roots/stacks/worktrees/zfin-2001
+  git worktree remove /opt/zfin/source_roots/features/worktrees/zfin-2001
 
 
   provision 'zfin-2001' timing
@@ -857,7 +857,7 @@ Preparing worktree (checking out 'someones-branch')
 branch 'someones-branch' set up to track 'origin/someones-branch'.
 ...
 >> provisioned review-pr
-     worktree : /opt/zfin/source_roots/stacks/worktrees/review-pr
+     worktree : /opt/zfin/source_roots/features/worktrees/review-pr
      branch   : someones-branch  (existing)
 ...
 ```
@@ -904,8 +904,8 @@ branch 'someones-branch' set up to track 'origin/someones-branch'.
 15:33:10 ryan@mac:.../worktrees/main$ z feature new ZFIN-2002 -y --shared-db --up
 >> seed: 2026-09-29
 >> shared db+solr: using the 'zfin_shared' stack (no per-feature copy)
->> warm app tier: yes (from /opt/zfin/source_roots/stacks/seeds/2026-09-29)
->> warm build caches: yes (gradle + maven + npm, from /opt/zfin/source_roots/stacks/seeds/2026-09-29)
+>> warm app tier: yes (from /opt/zfin/source_roots/features/seeds/2026-09-29)
+>> warm build caches: yes (gradle + maven + npm, from /opt/zfin/source_roots/features/seeds/2026-09-29)
 >> plan: worktree + branch  ->  per-feature .env  ->  restore volumes from seed  ->  start tomcat httpd
 >> allocated port offset +8  (skipped in use: 1, 2, 3, 4, 5, 6, 7)
 >> reach it at: https://127.0.0.1:8451
@@ -941,7 +941,7 @@ branch 'someones-branch' set up to track 'origin/someones-branch'.
      ...
 
 next:
-  cd /opt/zfin/source_roots/stacks/worktrees/zfin-2002                           # z commands resolve to 'zfin-2002' from here
+  cd /opt/zfin/source_roots/features/worktrees/zfin-2002                           # z commands resolve to 'zfin-2002' from here
   # tomcat+httpd up, serving main's deploy on the SHARED db/solr at https://127.0.0.1:8451
 ...
 ```
@@ -981,11 +981,11 @@ zfin_shared-solr-1   ghcr.io/zfin/zfin-solr:main   "docker-entrypoint.s…"   so
 >> stopping shared db+solr (up to 120s for postgres to checkpoint)
 ...
 >> shared db shut down cleanly (checkpoint complete)
->> capturing zfin_shared_pg_data -> /opt/zfin/source_roots/stacks/archive/zfin_shared/pg_data.tgz (pigz -1)
->> capturing zfin_shared_solr_var -> /opt/zfin/source_roots/stacks/archive/zfin_shared/solr_var.tgz (pigz -1)
+>> capturing zfin_shared_pg_data -> /opt/zfin/source_roots/features/archive/zfin_shared/pg_data.tgz (pigz -1)
+>> capturing zfin_shared_solr_var -> /opt/zfin/source_roots/features/archive/zfin_shared/solr_var.tgz (pigz -1)
 >> down -v the shared stack (the archive is the copy now)
 ...
->> shared stack frozen: 6.6 GB in 128s -> /opt/zfin/source_roots/stacks/archive/zfin_shared
+>> shared stack frozen: 6.6 GB in 128s -> /opt/zfin/source_roots/features/archive/zfin_shared
 >> its sharers must be thawed/restarted after `z shared thaw`: zfin-10453, zfin-10485, zfin-2002
 16:10:00 ryan@mac:.../worktrees/main$ z shared thaw
 >> thaw shared stack  frozen 2026-09-29 15:47:31  volumes=pg_data, solr_var
@@ -1073,9 +1073,9 @@ one-off containers (z run):
 
 ```console
 15:44:07 ryan@mac:.../worktrees/zfin-12345$ z feature session export
->> capturing zfin-12345_claude_home -> /opt/zfin/source_roots/stacks/archive/sessions/zfin-12345-20260929-154407.tgz (pigz -1)
->> transcripts -> /opt/zfin/source_roots/stacks/archive/sessions/zfin-12345-20260929-154407.transcripts.tgz (0.4 MB)
->> archived 3.1 MB -> /opt/zfin/source_roots/stacks/archive/sessions/zfin-12345-20260929-154407.tgz
+>> capturing zfin-12345_claude_home -> /opt/zfin/source_roots/features/archive/sessions/zfin-12345-20260929-154407.tgz (pigz -1)
+>> transcripts -> /opt/zfin/source_roots/features/archive/sessions/zfin-12345-20260929-154407.transcripts.tgz (0.4 MB)
+>> archived 3.1 MB -> /opt/zfin/source_roots/features/archive/sessions/zfin-12345-20260929-154407.tgz
 15:44:20 ryan@mac:.../worktrees/zfin-12345$ z feature session ls
 ARCHIVE                                          KIND      SIZE  ARCHIVED
 zfin-12345-20260929-154407.transcripts.tgz       chat      0.4M  2026-09-29 15:44
@@ -1083,7 +1083,7 @@ zfin-12345-20260929-154407.tgz                   full      3.1M  2026-09-29 15:4
 zfin-10485-20260922-101530.transcripts.tgz       chat      1.2M  2026-09-22 10:15
 zfin-10485-20260922-101530.tgz                   full      5.8M  2026-09-22 10:15
 
-in /opt/zfin/source_roots/stacks/archive/sessions
+in /opt/zfin/source_roots/features/archive/sessions
   chat = the conversation transcripts only (projects/**.jsonl) -- what you read
   full = the whole sidecar home, for resuming a session rather than reading it
   tar xzf <archive> -C <somewhere>
@@ -1098,7 +1098,7 @@ in /opt/zfin/source_roots/stacks/archive/sessions
 16:00:10 ryan@mac:.../worktrees/zfin-12345$ z feature freeze
 >> freeze 'zfin-12345'  project=zfin-12345  data=own
 >> volumes  : pg_data, solr_var, www_data, catalina_base, keystore, tls_certs, claude_home, jenkins_data
->> archive  : /opt/zfin/source_roots/stacks/archive/zfin-12345
+>> archive  : /opt/zfin/source_roots/features/archive/zfin-12345
 >> stopping the app tier (before the data tier, so nothing is mid-write)
 [+] stop 2/2
  ✔ Container zfin-12345-httpd-1   Stopped     0.2s
@@ -1108,15 +1108,15 @@ in /opt/zfin/source_roots/stacks/archive/sessions
  ✔ Container zfin-12345-solr-1    Stopped     2.1s
  ✔ Container zfin-12345-db-1      Stopped     0.7s
 >> db shut down cleanly (checkpoint complete)
->> capturing zfin-12345_pg_data -> /opt/zfin/source_roots/stacks/archive/zfin-12345/pg_data.tgz (pigz -1)
->> capturing zfin-12345_solr_var -> /opt/zfin/source_roots/stacks/archive/zfin-12345/solr_var.tgz (pigz -1)
+>> capturing zfin-12345_pg_data -> /opt/zfin/source_roots/features/archive/zfin-12345/pg_data.tgz (pigz -1)
+>> capturing zfin-12345_solr_var -> /opt/zfin/source_roots/features/archive/zfin-12345/solr_var.tgz (pigz -1)
 ...
->> capturing zfin-12345_jenkins_data -> /opt/zfin/source_roots/stacks/archive/zfin-12345/jenkins_data.tgz (pigz -1)
+>> capturing zfin-12345_jenkins_data -> /opt/zfin/source_roots/features/archive/zfin-12345/jenkins_data.tgz (pigz -1)
 >> down -v (removes containers + this stack's volumes; the archive is the copy now)
 [+] down 13/13
 ...
 >> removing 1 archived volume(s) `down -v` left behind (profile-scoped services): claude_home
->> frozen: 7.0 GB archived in 140s (pigz -1) -> /opt/zfin/source_roots/stacks/archive/zfin-12345
+>> frozen: 7.0 GB archived in 140s (pigz -1) -> /opt/zfin/source_roots/features/archive/zfin-12345
 >> thaw with:  z feature thaw zfin-12345
 
   freeze 'zfin-12345' timing
@@ -1135,7 +1135,7 @@ in /opt/zfin/source_roots/stacks/archive/sessions
       keystore             0.9s         0 MB       0 MB/s
       tls_certs            0.9s         0 MB       0 MB/s
 16:03:00 ryan@mac:.../worktrees/zfin-12345$ z feature freeze
-!! 'zfin-12345' already has an archive at /opt/zfin/source_roots/stacks/archive/zfin-12345 (frozen already?).
+!! 'zfin-12345' already has an archive at /opt/zfin/source_roots/features/archive/zfin-12345 (frozen already?).
    z feature thaw zfin-12345   to bring it back, or --force to overwrite the archive
 16:03:10 ryan@mac:.../worktrees/zfin-12345$ git status -sb | head -2
 ## zfin-12345
@@ -1158,7 +1158,7 @@ STATE: frozen = archived by `z feature freeze`, restore with `z feature thaw`
 09:00:05 ryan@mac:.../worktrees/zfin-12345$ z feature thaw
 >> thaw 'zfin-12345'  project=zfin-12345  frozen 2026-09-29 16:02:44  data=archived
 >> branch   : zfin-12345 @ 7d3e9a1c42
->> restoring 8 volume(s) from /opt/zfin/source_roots/stacks/archive/zfin-12345
+>> restoring 8 volume(s) from /opt/zfin/source_roots/features/archive/zfin-12345
 >>   [1/8] tls_certs            0 MB in   1.3s
 >>   [2/8] keystore             0 MB in   1.4s
 >>   [3/8] claude_home          3 MB in   1.9s
@@ -1167,14 +1167,14 @@ STATE: frozen = archived by `z feature freeze`, restore with `z feature thaw`
 >>   [6/8] catalina_base      281 MB in   8.1s
 >>   [7/8] solr_var          3176 MB in  60.4s
 >>   [8/8] pg_data           3561 MB in  77.9s
->> re-warming build caches from /opt/zfin/source_roots/stacks/seeds/2026-09-29 (gradle_cache, maven_cache, npm_cache)
+>> re-warming build caches from /opt/zfin/source_roots/features/seeds/2026-09-29 (gradle_cache, maven_cache, npm_cache)
 >>   [1/3] maven_cache        402 MB in  12.4s
 >>   [2/3] npm_cache          336 MB in  18.1s
 >>   [3/3] gradle_cache      1210 MB in  29.3s
 [+] up 5/5
 ...
 >> thawed. https://127.0.0.1:8448
->> (the archive at /opt/zfin/source_roots/stacks/archive/zfin-12345 is kept -- remove it by hand once you trust the thaw)
+>> (the archive at /opt/zfin/source_roots/features/archive/zfin-12345 is kept -- remove it by hand once you trust the thaw)
 
   thaw 'zfin-12345' timing
     manifest checks     1.8s     1%
@@ -1201,7 +1201,7 @@ STATE: frozen = archived by `z feature freeze`, restore with `z feature thaw`
 !! these images have changed since the freeze: tomcat (ghcr.io/zfin/zfin-tomcat:main), httpd (ghcr.io/zfin/zfin-httpd:main)
    The tags are the same but the images behind them moved. The stack will start;
    redeploy (gradle dirtydeploy) if behaviour looks unlike what you archived.
->> restoring 8 volume(s) from /opt/zfin/source_roots/stacks/archive/zfin-10510
+>> restoring 8 volume(s) from /opt/zfin/source_roots/features/archive/zfin-10510
 ...
 ```
 
@@ -1238,14 +1238,14 @@ STATE: frozen = archived by `z feature freeze`, restore with `z feature thaw`
 17:00:10 ryan@mac:.../worktrees/main$ z feature rm zfin-12345
 About to REMOVE feature 'zfin-12345' (destructive):
   - docker compose down -v            (containers + this feature's volumes/copies)
-  - git worktree remove --force /opt/zfin/source_roots/stacks/worktrees/zfin-12345 + branch -D zfin-12345  (drops uncommitted work)
+  - git worktree remove --force /opt/zfin/source_roots/features/worktrees/zfin-12345 + branch -D zfin-12345  (drops uncommitted work)
   - archiving the sidecar session first (--no-session to skip)
-  - rm -rf /opt/zfin/source_roots/stacks/archive/zfin-12345   (7.0 GB freeze archive -- --keep-archive to spare it)
+  - rm -rf /opt/zfin/source_roots/features/archive/zfin-12345   (7.0 GB freeze archive -- --keep-archive to spare it)
   - tmux kill-session -t zfin-12345        (the feature's shell)
 Proceed? [y/N]: y
->> capturing zfin-12345_claude_home -> /opt/zfin/source_roots/stacks/archive/sessions/zfin-12345-20260930-170012.tgz (pigz -1)
->> transcripts -> /opt/zfin/source_roots/stacks/archive/sessions/zfin-12345-20260930-170012.transcripts.tgz (0.6 MB)
->> archived the sidecar session (3.4 MB) -> /opt/zfin/source_roots/stacks/archive/sessions/zfin-12345-20260930-170012.tgz
+>> capturing zfin-12345_claude_home -> /opt/zfin/source_roots/features/archive/sessions/zfin-12345-20260930-170012.tgz (pigz -1)
+>> transcripts -> /opt/zfin/source_roots/features/archive/sessions/zfin-12345-20260930-170012.transcripts.tgz (0.6 MB)
+>> archived the sidecar session (3.4 MB) -> /opt/zfin/source_roots/features/archive/sessions/zfin-12345-20260930-170012.tgz
 >> down -v the 'zfin-12345' stack (and its own built images)
 [+] down 14/14
  ✔ Container zfin-12345-httpd-1     Removed     0.3s
@@ -1255,24 +1255,24 @@ Proceed? [y/N]: y
  ...
  ✔ Network zfin-12345_default       Removed     0.2s
 >> removing 1 volume(s) `down -v` left behind: zfin-12345_claude_home
->> removing worktree /opt/zfin/source_roots/stacks/worktrees/zfin-12345
+>> removing worktree /opt/zfin/source_roots/features/worktrees/zfin-12345
 >> deleting branch zfin-12345
 Deleted branch zfin-12345 (was 7d3e9a1c42).
 >> killing tmux session 'zfin-12345'
->> removing freeze archive /opt/zfin/source_roots/stacks/archive/zfin-12345 (7.0 GB)
+>> removing freeze archive /opt/zfin/source_roots/features/archive/zfin-12345 (7.0 GB)
 >> removed feature 'zfin-12345'
 ```
 
 ```console
 # A branch that predates its stack survives it. And on Linux, container-owned files are reclaimed first.
-09:15:00 ryan@cell:.../zfin-dev/cell$ z feature rm review-pr --force
+09:15:00 ryan@cell:.../features/cell$ z feature rm review-pr --force
 >> down -v the 'review-pr' stack (and its own built images)
 ...
->> reclaiming container-owned files (e.g. /opt/zfin-dev/worktrees/review-pr/node_modules) -- chown -> 1003:1003
->> removing worktree /opt/zfin-dev/worktrees/review-pr
+>> reclaiming container-owned files (e.g. /opt/zfin/source_roots/features/worktrees/review-pr/node_modules) -- chown -> 1003:1003
+>> removing worktree /opt/zfin/source_roots/features/worktrees/review-pr
 >> keeping branch someones-branch (pre-existing -- created before this feature stack)
 >> removed feature 'review-pr'
-09:16:30 ryan@cell:.../zfin-dev/cell$ echo | z feature rm zfin-2001
+09:16:30 ryan@cell:.../features/cell$ echo | z feature rm zfin-2001
 !! z feature rm: no TTY -- pass --force to confirm
 ```
 
@@ -1315,28 +1315,28 @@ BUILD FAILED
 ```
 
 ```console
-09:00:00 ryan@laptop:~/zfin-dev/worktrees/main$ z fresh-install --dry-run
+09:00:00 ryan@laptop:.../worktrees/main$ z fresh-install --dry-run
 >> checking the machine is ZFIN-fresh...
 >>   fresh ✓ (no ZFIN volumes / images / containers)
 >> checking init inputs...
-   ✓ DOCKER_DB_UNLOADS_PATH                 /Users/ryan/zfin-dev/mounts/unloads/db
-   ✓ DOCKER_SOLR_UNLOADS_PATH               /Users/ryan/zfin-dev/mounts/unloads/solr
+   ✓ DOCKER_DB_UNLOADS_PATH                 /opt/zfin/source_roots/features/mounts/unloads/db
+   ✓ DOCKER_SOLR_UNLOADS_PATH               /opt/zfin/source_roots/features/mounts/unloads/solr
    – DOCKER_BOWTIE_PATH                     (unset)   (optional, skipped)
-   ✓ DOCKER_ABBLAST_PATH                    /Users/ryan/zfin-dev/mounts/blast
-   ✓ DOCKER_BLASTSERVER_BLAST_DATABASE_PATH /Users/ryan/zfin-dev/mounts/blast
-   ✓ DOCKER_LOADUP_PATH                     /Users/ryan/zfin-dev/mounts/loadUp
+   ✓ DOCKER_ABBLAST_PATH                    /opt/zfin/source_roots/features/mounts/blast
+   ✓ DOCKER_BLASTSERVER_BLAST_DATABASE_PATH /opt/zfin/source_roots/features/mounts/blast
+   ✓ DOCKER_LOADUP_PATH                     /opt/zfin/source_roots/features/mounts/loadUp
    ✓ db dump: loaddb will use 2026.09.27/zfindb.bak
    ✓ solr dump: getLatestSolrIndex will use zfindb/v9/snapshot.20260927031502123
 >> --dry-run: using defaults (pull images; no first ticket)
 
 Plan:
-  $ /Users/ryan/zfin-dev/orchestrator/z build all
+  $ /opt/zfin/source_roots/features/orchestrator/z build all
 >> dry-run: not executing.
 ```
 
 ```console
 # After editing anything in lib/.
-11:30:00 ryan@mac:.../stacks/orchestrator$ ./check
+11:30:00 ryan@mac:.../features/orchestrator$ ./check
 compiling lib/:
   ok    FeatureFreeze
   ok    FeatureList
