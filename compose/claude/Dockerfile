@@ -28,9 +28,15 @@ USER root
 ARG CLAUDE_CODE_VERSION=latest
 # The package's postinstall puts the platform-native binary in place; without it the CLI errors
 # with "claude native binary not installed". npm 12 blocks install scripts not named in
-# allow-scripts, so allow this one -- as ENV, because the updater's own `npm install -g` needs
-# it as much as this build does.
-ENV NPM_CONFIG_ALLOW_SCRIPTS=@anthropic-ai/claude-code
+# allow-scripts, so allow this one -- for the updater's own `npm install -g` too, not just this
+# build. It goes in a GLOBAL npmrc, NOT the environment: npm 12 rejects allow-scripts given by
+# env or CLI in project-scoped installs ("EALLOWSCRIPTS ... --allow-scripts is not allowed in
+# project-scoped installs"), so an ENV here broke every `npm ci`/`npm audit` the agent ran on
+# the ZFIN checkout (seen 2026-11-20). From a config file it applies to both, and the project's
+# own .npmrc still layers on top. /etc, not the prefix's etc/: the claude_code volume mounts
+# over /opt/claude-code.
+RUN printf 'allow-scripts=@anthropic-ai/claude-code\n' > /etc/npmrc-claude
+ENV NPM_CONFIG_GLOBALCONFIG=/etc/npmrc-claude
 RUN NPM_CONFIG_PREFIX=/opt/claude-code npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && npm cache clean --force \
     && chown -R gradle /opt/claude-code
