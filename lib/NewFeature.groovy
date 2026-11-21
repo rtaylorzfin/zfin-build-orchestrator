@@ -339,51 +339,10 @@ class NewFeature {
         if (proxyGap) System.err.println("!! $proxyGap")
 
         if (doSharedDb) {
-            // What must be true is that the shared db+solr are RUNNING -- not that a network
-            // object exists. Those are different: the shared stack's network outlives `z shared down`
-            // whenever a feature is still attached to it (Docker refuses to remove an in-use
-            // network), so the old `network inspect` guard passed happily with no data tier at
-            // all, and provisioning then "succeeded" into a stack that cannot reach a database.
-            def sharedRunning = {
-                StackConfig.DATA_SERVICES.every { svc ->
-                    captureOutput(['docker', 'ps', '-q',
-                                   '--filter', "label=com.docker.compose.project=${zfinUtil.sharedProject()}",
-                                   '--filter', "label=com.docker.compose.service=$svc"])
-                }
-            }
-            if (!sharedRunning()) {
-                // `z shared up` starts only a shared stack it manages (labelled, or not yet
-                // created). When ZFIN_SHARED_PROJECT names anything else -- a real instance like
-                // `cell`, or a shared stack another tree runs -- it is not ours to start.
-                if (!zfinUtil.managedSharedStack(zfinUtil.sharedProject()))
-                    die("--shared-db points at the '${zfinUtil.sharedProject()}' project, which is not running.\n" +
-                        "   It is not a shared stack z manages (a real instance, or another tree's), so\n" +
-                        "   `z shared up` cannot start it. Bring it up yourself, or give this tree its own:\n" +
-                        "     z config set ZFIN_SHARED_PROJECT=<name>\n" +
-                        "   Nothing was created for this feature.")
-                // Start it rather than refuse. Asking for --shared-db IS asking to use the
-                // shared stack, so having it running is a precondition of the request, not a
-                // separate decision -- and `z shared up` is idempotent and binds no host ports.
-                // Auto-start what affects only itself; refuse for what takes a host-wide
-                // resource, such as ports another stack may hold.
-                def seeded = zfinUtil.volumeExists("${zfinUtil.sharedProject()}_pg_data")
-                info(seeded ? "shared data stack is down -- starting it (volumes already seeded)"
-                            : "shared data stack has never run -- starting it; this SEEDS ~19G db + ~9G solr once")
-                new SharedStack().run(['up'] + (tag ? ['--tag', tag] : []), zfinUtil)
-                if (!sharedRunning())
-                    die("shared db+solr still not running after `z shared up` -- fix that first, " +
-                        "then re-run. Nothing was created for this feature.")
-            }
-            def src = zfinUtil.sharedProject()
-            info("shared db+solr: using the '$src' stack (no per-feature copy)")
-            if (!zfinUtil.managedSharedStack(src)) {
-                // Pointing at a real instance rather than a shared stack z runs. Worth more than
-                // the usual shared-writes note: this is someone's working database, and a
-                // liquibase migration or a curation edit from this branch lands in it.
-                System.err.println("!! '$src' is not a shared stack z manages -- this feature will read AND WRITE")
-                System.err.println("   a live instance's database. A schema migration (gradle liquibasePostBuild)")
-                System.err.println("   or any curation edit here hits that instance. Read-mostly work only.")
-            }
+            // Running, not merely present, and started here if it is not -- see
+            // SharedStack.ensureRunning. Before anything is created, so a shared stack that
+            // cannot start leaves no half-provisioned feature behind.
+            SharedStack.ensureRunning(zfinUtil, tag, '--shared-db', 'Nothing was created for this feature.')
         } else {
             // Fail fast, BEFORE the worktree, .env and volumes exist -- a bad seed should
             // leave no partial state behind.

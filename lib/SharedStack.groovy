@@ -17,6 +17,54 @@
 //
 // SHARED DATA == SHARED WRITES: read-mostly features only. See docs/dev-stacks.md.
 class SharedStack {
+    /** Are the shared db AND solr running? What a sharer needs -- not that a network object
+     *  exists. Those differ: the shared stack's network outlives `z shared down` whenever a
+     *  feature is still attached to it (Docker refuses to remove an in-use network), so a
+     *  `network inspect` guard passes happily with no data tier at all. */
+    static boolean dataRunning(ZfinUtil zfinUtil) {
+        StackConfig.DATA_SERVICES.every { svc ->
+            zfinUtil.captureOutput(['docker', 'ps', '-q',
+                           '--filter', "label=com.docker.compose.project=${zfinUtil.sharedProject()}",
+                           '--filter', "label=com.docker.compose.service=$svc"])
+        }
+    }
+
+    /** Make sure the shared db+solr are running, for a command that is about to attach a stack
+     *  to them (`z feature new --shared-db`, `z feature share`). Starts them rather than
+     *  refusing: asking to share IS asking for the shared stack, and `z shared up` is
+     *  idempotent and binds no host ports. Dies -- naming `who` and ending with `nothingDone`
+     *  -- when they cannot be started, or when ZFIN_SHARED_PROJECT names a project that is not
+     *  z's to start (a real instance, another tree's shared stack). Warns, without dying, when
+     *  that project IS running but is not z's: the caller is about to write a live database.
+     *  `tag` seeds the shared stack on its first run (null: `z shared up`'s own choice). */
+    static void ensureRunning(ZfinUtil zfinUtil, String tag, String who, String nothingDone) {
+        def src = zfinUtil.sharedProject()
+        if (!dataRunning(zfinUtil)) {
+            if (!zfinUtil.managedSharedStack(src))
+                zfinUtil.die("$who points at the '$src' project, which is not running.\n" +
+                    "   It is not a shared stack z manages (a real instance, or another tree's), so\n" +
+                    "   `z shared up` cannot start it. Bring it up yourself, or give this tree its own:\n" +
+                    "     z config set ZFIN_SHARED_PROJECT=<name>\n" +
+                    "   $nothingDone")
+            def seeded = zfinUtil.volumeExists("${src}_pg_data")
+            zfinUtil.info(seeded ? "shared data stack is down -- starting it (volumes already seeded)"
+                                 : "shared data stack has never run -- starting it; this SEEDS ~19G db + ~9G solr once")
+            new SharedStack().run(['up'] + (tag ? ['--tag', tag] : []), zfinUtil)
+            if (!dataRunning(zfinUtil))
+                zfinUtil.die("shared db+solr still not running after `z shared up` -- fix that first, " +
+                    "then re-run. $nothingDone")
+        }
+        zfinUtil.info("shared db+solr: using the '$src' stack (no per-feature copy)")
+        if (!zfinUtil.managedSharedStack(src)) {
+            // Pointing at a real instance rather than a shared stack z runs. Worth more than
+            // the usual shared-writes note: this is someone's working database, and a
+            // liquibase migration or a curation edit from this branch lands in it.
+            System.err.println("!! '$src' is not a shared stack z manages -- this feature will read AND WRITE")
+            System.err.println("   a live instance's database. A schema migration (gradle liquibasePostBuild)")
+            System.err.println("   or any curation edit here hits that instance. Read-mostly work only.")
+        }
+    }
+
     def run(List args, ZfinUtil zfinUtil) {
         if (zfinUtil.helpRequested(args, this)) return
         def die = zfinUtil.&die; def info = zfinUtil.&info

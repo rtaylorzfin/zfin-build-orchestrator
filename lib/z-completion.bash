@@ -83,7 +83,7 @@ _z_complete() {
             fi ;;
         feature)
             if (( COMP_CWORD == argstart )); then
-                COMPREPLY=( $(compgen -W "new ls rm refresh freeze thaw session" -- "$cur") )
+                COMPREPLY=( $(compgen -W "new ls rm refresh freeze thaw session share unshare" -- "$cur") )
             else
                 case "${COMP_WORDS[argstart]}" in
                     ls|list)         COMPREPLY=( $(compgen -W "--all -v --frozen" -- "$cur") ) ;;
@@ -97,6 +97,8 @@ _z_complete() {
                     freeze)          COMPREPLY=( $(compgen -W "$(_z_features) --caches --compress --no-compress --to --force" -- "$cur") ) ;;
                     thaw)            COMPREPLY=( $(compgen -W "$(_z_features) --from --no-up --no-caches --force" -- "$cur") ) ;;
                     refresh)         COMPREPLY=( $(compgen -W "$(_z_features) --all --dry-run" -- "$cur") ) ;;
+                    share)           COMPREPLY=( $(compgen -W "$(_z_features) -y --yes --seed" -- "$cur") ) ;;
+                    unshare)         COMPREPLY=( $(compgen -W "$(_z_features) --seed" -- "$cur") ) ;;
                 esac
             fi ;;
     esac

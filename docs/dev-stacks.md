@@ -132,6 +132,7 @@ tool's own files are found from where `z` lives, and the ZFIN checkout from wher
 | `lib/ZfinUtil.groovy` | Shared class: process/logging helpers, canonical roots, and the volume capture/restore contract (`APP_VOLS`/`CACHE_VOLS`/`DATA_VOLS`) — the single source seed, freeze, thaw and new-feature all read. |
 | `lib/StackOps.groovy` | The stack lifecycle family: `run`/`exec`/`up`/`stop`/`down`/`pull`/`log`/`restart`/`status`. |
 | `lib/SharedStack.groovy` | The shared data stack (`z shared up`/`down`/`status`) that `--shared-db` features attach to. |
+| `lib/FeatureShare.groovy` | `z feature share`/`unshare`: switch an existing stack to the shared db+solr, or back to its own. |
 | `lib/NewFeature.groovy` | Provision a feature: worktree + `docker/.env` + boot (`z feature new`). |
 | `lib/FeatureFreeze.groovy` / `FeatureThaw.groovy` | Park a stack's volumes to an archive, and restore them (`z feature freeze`/`thaw`). |
 | `lib/FeatureSession.groovy` | Archive the Claude sidecar's history so it outlives the stack (`z feature session`). |
@@ -516,6 +517,29 @@ by one feature is instantly visible to (and can break) the others. There is no c
 write-isolation (a per-feature `DATABASE`/`TEMPLATE` is a full copy, which negates the
 saving). So `--shared-db` is for **read-mostly** parallel work; a feature that needs its own
 schema/writes should be a normal per-feature-copy stack.
+
+### Switching an existing stack (`z feature share` / `unshare`)
+
+Deciding at `z feature new` time is not required. A stack made with its own copy can drop it
+and attach to the shared one later, in place -- worktree, branch, deployed webapp, caches and
+Jenkins untouched:
+
+```bash
+z feature share ZFIN-1        # (or inside its worktree, no ticket) -- asks first; -y to skip
+z feature unshare ZFIN-1      # back to its own db+solr, restored from its seed (--seed T for another)
+```
+
+`share` starts the shared stack if it is down, removes the stack's own db/solr containers,
+records `docker-compose.overlay-shared-db.yml` in its `ZFIN_COMPOSE_OVERLAYS`, connects the
+shared containers into its network, and **deletes its own `pg_data`/`solr_var` volumes** --
+so any writes or migrations made only in them are gone. Only the db clients (tomcat,
+tomcatdebug, jenkins) are stopped and restarted; httpd, compile and the claude sidecar keep
+running. If the stack does not come back up on the shared data, its own volumes are kept and
+`unshare` reuses them instead of restoring.
+
+Both compare liquibase's `databasechangelog` in the two dbs and name changesets one has and the
+other lacks: a migration the branch ran on its own db does not come with it, and re-running it
+on the shared db migrates it for every sharer.
 
 ## Listing + teardown
 
