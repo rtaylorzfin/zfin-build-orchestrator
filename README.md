@@ -36,4 +36,4 @@ and `ztree` to the tree itself. `zrun` and `zexec` are `z run` and `z exec`. The
 | `compose/` | compose overlays layered on the ZFIN checkout's base file, and the sidecar's build context |
 | `check` | compiles every command class; run it after editing `lib/` |
 | `compose/proxy.yml` | the reverse proxy `z proxy up` runs: every stack at `https://<slug>.review.zfin.test` |
-| `docs/` | [dev-stacks.md](docs/dev-stacks.md) to start; [dev-stacks-by-example.md](docs/dev-stacks-by-example.md) as terminal sessions |
+| `docs/` | [dev-stacks.md](docs/dev-stacks.md) to start; [dev-stacks-by-example.md](docs/dev-stacks-by-example.md) as terminal sessions; [sidecar-fleet.md](docs/sidecar-fleet.md) for supervised Claude crewmates |

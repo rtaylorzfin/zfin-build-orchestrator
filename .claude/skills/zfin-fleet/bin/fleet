@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+# fleet -- the supervisor's helper for running Claude crewmates on ZFIN feature stacks in herdr.
+# See ../SKILL.md for the workflow; this script only does the mechanical, reversible steps.
+#
+#   fleet up <ticket> [z feature new flags...]  herdr workspace + `z feature new` in its pane 1
+#   fleet intake <ticket>                       Jira ticket (+ comments) -> .sidecar/data/ticket.md
+#   fleet crew <ticket>                         start the crewmate in pane 2 (crew-<n>), past its startup prompts
+#   fleet send <ticket> <brief.md>              next inbox/NNN.md (brief + rules), prompt the crewmate
+#   fleet wait <ticket> [timeout_s]             until outbox/NNN.md exists AND the crewmate is idle; print it
+#   fleet state <ticket> [key=value ...]        show state.md, or set fields in it
+#   fleet status                                one line per ticket: stage, waiting-on, crewmate state
+#   fleet check <ticket>                        read-only pre-teardown checks (pushed? clean? deliverables?)
+#   fleet down <ticket> --yes                   archive deliverables, stop crewmate, z feature rm, close workspace
+#
+# <ticket> is the stack name, e.g. zfin-8072 (a bare number means zfin-<number>).
+# Never pushes, never ssh's, never writes to shared mounts. `down` refuses without --yes:
+# the supervisor asks the developer first and passes --yes only after a "yes".
+set -euo pipefail
+
+STACKS=${ZFIN_DEV_ROOT:-/opt/zfin/source_roots/stacks}
+WT=$STACKS/worktrees
+ARCHIVE=$STACKS/archive/reports
+SKILL_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+PY=${FLEET_PYTHON:-python3}
+
+die() { echo "fleet: $*" >&2; exit 1; }
+say() { echo ">> $*"; }
+norm() { local t=$1; [[ $t =~ ^[0-9]+$ ]] && t=zfin-$t; echo "$t" | tr "[:upper:]" "[:lower:]"; }
+up() { echo "$1" | tr "[:lower:]" "[:upper:]"; }
+num() { echo "${1#zfin-}"; }
+crew() { echo "crew-$(num "$1")"; }
+wtdir() { echo "$WT/$1"; }
+sc() { echo "$WT/$1/.sidecar"; }
+
+# herdr JSON helpers --------------------------------------------------------------------------
+ws_id() {  # workspace id for a label, or empty
+  herdr workspace list | $PY -c 'import json,sys
+for w in json.load(sys.stdin)["result"]["workspaces"]:
+    if w["label"]==sys.argv[1]: print(w["workspace_id"]); break' "$1"
+}
+pane() {   # pane id: $1 ticket, $2 index (1 = stack pane, 2 = crewmate)
+  local w; w=$(ws_id "$1"); [ -n "$w" ] || die "no herdr workspace labelled $1 (fleet up $1)"
+  herdr pane list | $PY -c 'import json,sys
+ps=[p["pane_id"] for p in json.load(sys.stdin)["result"]["panes"] if p["workspace_id"]==sys.argv[1]]
+i=int(sys.argv[2])-1
+print(ps[i] if i<len(ps) else "")' "$w" "$2"
+}
+agent_status() { herdr agent get "$1" 2>/dev/null | $PY -c 'import json,sys
+try: print(json.load(sys.stdin)["result"]["agent"]["agent_status"])
+except Exception: print("none")'; }
+pane_tail() { herdr pane read "$1" --lines "${2:-20}"; }
+
+# state.md helpers ----------------------------------------------------------------------------
+state_set() {  # state_set <ticket> key value -- replace "key: ..." keeping the rest of the line out
+  local f; f=$(sc "$1")/state.md; [ -f "$f" ] || die "no $f"
+  $PY - "$f" "$2" "$3" <<'EOF'
+import sys,re
+p,k,v=sys.argv[1:]
+s=open(p).read()
+pat=re.compile(r'^(%s:\s*)(.*)$'%re.escape(k),re.M)
+s=pat.sub(lambda m:m.group(1)+v,s,1) if pat.search(s) else s.rstrip('\n')+'\n%s: %s\n'%(k,v)
+open(p,'w').write(s)
+EOF
+}
+state_get() { sed -n "s/^$2:[[:space:]]*//p" "$(sc "$1")/state.md" | head -1; }
+
+ensure_sidecar() {
+  local t=$1 d; d=$(sc "$t")
+  [ -d "$(wtdir "$t")" ] || die "no worktree $(wtdir "$t") yet"
+  mkdir -p "$d"/{inbox,outbox,data,deliverables}
+  [ -f "$d/.gitignore" ] || echo '*' > "$d/.gitignore"
+  if [ ! -f "$d/state.md" ]; then
+    sed -e "s/{{TICKET}}/$(up "$t")/g" -e "s/{{STACK}}/$t/g" -e "s/{{CREW}}/$(crew "$t")/g" \
+      "$SKILL_DIR/templates/state.md" > "$d/state.md"
+  fi
+}
+
+# commands ------------------------------------------------------------------------------------
+cmd_up() {
+  local t; t=$(norm "$1"); shift
+  local flags=("$@"); [ ${#flags[@]} -gt 0 ] || flags=(-y --up --deploy --liquibase --node)
+  local w; w=$(ws_id "$t")
+  if [ -z "$w" ]; then
+    herdr workspace create --cwd "$WT/main" --label "$t" >/dev/null
+    say "herdr workspace $t created"
+  fi
+  local p; p=$(pane "$t" 1)
+  herdr pane run "$p" "cd $WT/main && z feature new $t ${flags[*]} --no-tmux 2>&1 | tee /tmp/fleet-$t-provision.log; echo FLEET-PROVISION-EXIT=\${PIPESTATUS[0]}"
+  say "provisioning $t in $p (log /tmp/fleet-$t-provision.log); wait with: fleet up-wait $t"
+}
+
+cmd_up_wait() {
+  local t; t=$(norm "$1"); local p; p=$(pane "$t" 1); local r=""
+  until r=$(pane_tail "$p" 4 | grep -oE 'FLEET-PROVISION-EXIT=[0-9]+'); do sleep 10; done
+  echo "$r"; [ "$r" = "FLEET-PROVISION-EXIT=0" ] || { tail -15 "/tmp/fleet-$t-provision.log"; exit 1; }
+  ensure_sidecar "$t"; state_set "$t" stage provisioned
+  local url; url=$(cd "$(wtdir "$t")" && z status 2>/dev/null | sed -n 's/.*\(https:[^ ]*\).*/\1/p' | head -1)
+  say "$t ready ${url:-}"
+}
+
+cmd_intake() {
+  local t; t=$(norm "$1"); ensure_sidecar "$t"
+  local out; out=$(sc "$t")/data/ticket.md
+  acli jira workitem view "$(up "$t")" --fields '*all' --json | $PY "$SKILL_DIR/bin/adf2md.py" > "$out"
+  say "wrote $out ($(wc -l < "$out") lines)"
+}
+
+cmd_crew() {
+  local t; t=$(norm "$1"); ensure_sidecar "$t"
+  local name; name=$(crew "$t")
+  [ "$(agent_status "$name")" = none ] || die "$name already exists ($(agent_status "$name"))"
+  local p; p=$(pane "$t" 2)
+  if [ -z "$p" ]; then herdr pane split "$(pane "$t" 1)" --direction right >/dev/null; p=$(pane "$t" 2); fi
+  herdr pane run "$p" "cd $(wtdir "$t") && HERDR_AGENT=claude z run claude -c 'claude --dangerously-skip-permissions; exec bash'"
+  # The sidecar profile pre-accepts folder trust and the bypass warning (orchestrator
+  # compose/claude/claude_profile), so normally claude goes straight to its input box. An
+  # image built before that still asks; each prompt defaults to "No, exit", so answer with
+  # Down + Enter. Wait for whichever comes first -- a prompt or the ready screen.
+  local i scr
+  for i in $(seq 1 90); do
+    scr=$(pane_tail "$p" 30)
+    if echo "$scr" | grep -qE 'trust this folder|Yes, I accept'; then
+      [ "$(agent_status "$name")" = none ] && herdr agent rename "$p" "$name" >/dev/null 2>&1 || true
+      herdr agent send-keys "$name" down >/dev/null; herdr agent send-keys "$name" enter >/dev/null
+      sleep 2
+    elif echo "$scr" | grep -q 'bypass permissions on'; then
+      break
+    else
+      sleep 2
+    fi
+  done
+  [ "$(agent_status "$name")" = none ] && herdr agent rename "$p" "$name" >/dev/null 2>&1 || true
+  for i in $(seq 1 30); do case $(agent_status "$name") in done|idle) break;; esac; sleep 2; done
+  state_set "$t" crewmate "$name ($p)"
+  say "$name is $(agent_status "$name") in $p"
+}
+
+next_no() { local d; d=$(sc "$1")/inbox; printf '%03d' $(( $(ls "$d" 2>/dev/null | grep -c '^[0-9]\{3\}\.md$') + 1 )); }
+last_no() { local d; d=$(sc "$1")/inbox; ls "$d" 2>/dev/null | grep '^[0-9]\{3\}\.md$' | sort | tail -1 | cut -c1-3; }
+
+cmd_send() {
+  local t; t=$(norm "$1"); local brief=$2; [ -f "$brief" ] || die "no brief $brief"
+  ensure_sidecar "$t"
+  local n; n=$(next_no "$t"); local f; f=$(sc "$t")/inbox/$n.md
+  { sed "s/{{NNN}}/$n/g; s/{{TICKET}}/$(up "$t")/g" "$brief"; echo
+    sed "s/{{NNN}}/$n/g; s/{{TICKET}}/$(up "$t")/g" "$SKILL_DIR/templates/rules.md"; } > "$f"
+  herdr agent prompt "$(crew "$t")" "Read .sidecar/inbox/$n.md and follow it." >/dev/null
+  state_set "$t" last "inbox $n sent $(date '+%F %H:%M') / outbox $(ls "$(sc "$t")/outbox" | grep -c '^[0-9]' || true) received"
+  state_set "$t" waiting-on crewmate
+  say "sent inbox/$n.md to $(crew "$t")"
+}
+
+cmd_wait() {
+  local t; t=$(norm "$1"); local tmo=${2:-3600}
+  local n; n=$(last_no "$t"); [ -n "$n" ] || die "nothing sent to $t yet"
+  local f; f=$(sc "$t")/outbox/$n.md; local name; name=$(crew "$t"); local s=0
+  # Both conditions: the file alone can be half-written; idle alone can mean "asked a question".
+  until [ -f "$f" ] && case $(agent_status "$name") in done|idle) true;; *) false;; esac; do
+    sleep 10; s=$((s+10)); [ $s -lt "$tmo" ] || { echo "TIMEOUT after ${tmo}s; $name is $(agent_status "$name")"; exit 2; }
+  done
+  state_set "$t" waiting-on supervisor
+  echo "== $f"; cat "$f"
+}
+
+cmd_state() {
+  local t; t=$(norm "$1"); shift
+  if [ $# -eq 0 ]; then cat "$(sc "$t")/state.md"; return; fi
+  local kv; for kv in "$@"; do state_set "$t" "${kv%%=*}" "${kv#*=}"; done
+}
+
+cmd_status() {
+  local d t
+  for d in "$WT"/*/.sidecar/state.md; do
+    [ -f "$d" ] || continue; t=$(basename "$(dirname "$(dirname "$d")")")
+    printf '%-14s stage=%-16s waiting-on=%-11s %s=%s\n' "$t" "$(state_get "$t" stage)" \
+      "$(state_get "$t" waiting-on)" "$(crew "$t")" "$(agent_status "$(crew "$t")")"
+  done
+}
+
+cmd_check() {  # read-only; exit 0 only when teardown is safe
+  local t; t=$(norm "$1"); local w; w=$(wtdir "$t"); local ok=0
+  [ -d "$w" ] || die "no worktree $w"
+  local br; br=$(git -C "$w" branch --show-current)
+  git -C "$w" fetch -q origin "$br" 2>/dev/null || true
+  # "Would rm lose work?" == commits on the branch that no remote-tracking ref contains. That
+  # covers pushed branches (0) and scout branches that never committed (0) alike.
+  local l; l=$(git -C "$w" rev-parse --short=10 "$br")
+  local un; un=$(git -C "$w" rev-list --count "$br" --not --remotes)
+  if [ "$un" = 0 ]; then echo "ok   no unpushed commits: $br @ $l"
+  else echo "FAIL $un commit(s) on $br exist on no remote:"; git -C "$w" log --oneline "$br" --not --remotes | sed 's/^/       /'; ok=1; fi
+  local dirty; dirty=$(git -C "$w" status --porcelain | grep -v '^?? \.sidecar/' | grep -v '^?? \.playwright-mcp/' || true)
+  if [ -z "$dirty" ]; then echo "ok   worktree clean"; else echo "FAIL uncommitted changes:"; echo "$dirty" | sed 's/^/       /'; ok=1; fi
+  local dl; dl=$(find "$(sc "$t")/deliverables" -type f 2>/dev/null | sed "s|$(sc "$t")/deliverables/||")
+  if [ -n "$dl" ]; then echo "info deliverables to archive -> $ARCHIVE/$t/:"; echo "$dl" | sed 's/^/       /'
+  else echo "info no deliverables in .sidecar/deliverables/"; fi
+  local stray; stray=$(find "$(sc "$t")/data" -type f \( -name '*.xlsx' -o -name '*.csv' -o -name '*.pdf' -o -name '*.html' \) 2>/dev/null || true)
+  [ -z "$stray" ] || { echo "WARN report-like files in data/ (move to deliverables/ to keep them):"; echo "$stray" | sed 's/^/       /'; }
+  local od; od=$(state_get "$t" "open decisions"); [ -z "$od" ] || [ "$od" = "-" ] || echo "info open decisions: $od"
+  return $ok
+}
+
+cmd_down() {
+  local t; t=$(norm "$1"); [ "${2:-}" = "--yes" ] || die "refusing without --yes (ask the developer first)"
+  cmd_check "$t" || die "pre-teardown checks failed; not tearing down $t"
+  if [ -n "$(find "$(sc "$t")/deliverables" -type f 2>/dev/null)" ]; then
+    mkdir -p "$ARCHIVE/$t"; cp -R "$(sc "$t")/deliverables/." "$ARCHIVE/$t/"
+    say "archived deliverables to $ARCHIVE/$t/"
+  fi
+  local name; name=$(crew "$t")
+  if [ "$(agent_status "$name")" != none ]; then
+    herdr agent prompt "$name" "/exit" >/dev/null 2>&1 || true; sleep 6
+    local p; p=$(pane "$t" 2); [ -z "$p" ] || herdr pane run "$p" "exit" >/dev/null 2>&1 || true; sleep 3
+  fi
+  (cd "$WT/main" && z feature rm "$t" --force)    # from main: rm must not run inside the stack's own shell
+  local w; w=$(ws_id "$t"); [ -z "$w" ] || herdr workspace close "$w" >/dev/null
+  say "$t torn down"
+}
+
+c=${1:-}; shift || true
+case $c in
+  up) cmd_up "$@";; up-wait) cmd_up_wait "$@";; intake) cmd_intake "$@";; crew) cmd_crew "$@";;
+  send) cmd_send "$@";; wait) cmd_wait "$@";; state) cmd_state "$@";; status) cmd_status;;
+  check) cmd_check "$@";; down) cmd_down "$@";;
+  *) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; [ -z "$c" ] || exit 2;;
+esac
