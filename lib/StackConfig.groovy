@@ -72,7 +72,7 @@ class StackConfig {
 
     // Published ports for a feature stack: base + ZFIN_PORT_OFFSET, one offset per stack.
     static final Map<String, Integer> PORT_BASES = [db: 5432, debug: 5000, jenkins: 9499,
-                                                    http: 8080, https: 8443]
+                                                    http: 8080, https: 8443, solr: 8984]
 
     // What a feature's .env carries beyond its identity keys, and the ONLY definition of it:
     // `z feature new` writes these at creation and `z feature refresh` backfills them into a

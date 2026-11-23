@@ -526,8 +526,13 @@ class NewFeature {
 // address. No loopback aliases, nothing to clean up at teardown.
 //
 // "Taken" is gathered so we never collide with the base stack, another feature, or whatever is
-// bound right now: offsets recorded in existing stacks' .env, plus any db or httpd port
+// bound right now: offsets recorded in existing stacks' .env, plus any db, httpd or solr port
 // currently published in our ranges, whoever owns it.
+//
+// Solr gets a port from the offset too. It used to be left to compose's "8983-8992" range,
+// and compose picks from a range without any lock: two stacks started together both took
+// 8989 and the second failed at "start db solr tomcat httpd" (seen 2026-11-23). Stacks made
+// before this still hold a range-picked solr port, so a published solr port counts as taken.
 //
 // The scan alone races: this stack's .env is only written in step 2, after the worktree
 // checkout (~30s), so two `z feature new` runs started together both saw the same offset free
@@ -556,6 +561,10 @@ class NewFeature {
                 def n = (m[1] as int) - StackConfig.PORT_BASES.https
                 if (n in 1..99) taken << n
             }
+            (published =~ /:(\d+)->8983\//).each { m ->
+                def n = (m[1] as int) - StackConfig.PORT_BASES.solr
+                if (n in 1..99) taken << n
+            }
 
             offset = 1
             while (offset <= 99) {
@@ -579,6 +588,7 @@ class NewFeature {
         def jenkPort  = StackConfig.PORT_BASES.jenkins + offset
         def httpPort  = StackConfig.PORT_BASES.http + offset
         def httpsPort = StackConfig.PORT_BASES.https + offset
+        def solrPort  = StackConfig.PORT_BASES.solr + offset
         def bind = zfinUtil.featureBind()
         def shown = bind == '0.0.0.0' ? 'localhost' : bind
         def directUrl = "https://$shown:$httpsPort"
@@ -620,7 +630,8 @@ class NewFeature {
                 DOCKER_JENKINS_HTTP_PORT: "$bind:$jenkPort",
                 DOCKER_TOMCATDEBUG_PORT : "$bind:$debugPort",
                 DOCKER_HTTPD_HTTP_PORT  : "$bind:$httpPort",
-                DOCKER_HTTPD_HTTPS_PORT : "$bind:$httpsPort"])
+                DOCKER_HTTPD_HTTPS_PORT : "$bind:$httpsPort",
+                DOCKER_SOLR_PORT        : "$bind:$solrPort"])
 // A branch we didn't create isn't ours to delete: teardown force-deletes the feature's
 // branch, which would be a nasty surprise for work that predates the stack. Record the
 // provenance here (the .env is the per-feature record `z feature rm` already reads) so

@@ -136,6 +136,7 @@ address):
 | db | `5432 + N` | Postgres cannot be routed by hostname; GUI clients need a port |
 | tomcatdebug | `5000 + N` | JDWP carries no routing information at all |
 | jenkins | `9499 + N` | convenience; also reachable at `<stack-url>/jobs` |
+| solr | `8984 + N` | admin UI; stacks made before 2026-11-23 hold a compose-picked port in 8983-8992 instead |
 
 `N` is allocated per stack (`ZFIN_PORT_OFFSET` in its `.env`, `--port-offset` to pin it), and
 skips any port in those ranges already published on the host. Solr is reached at
