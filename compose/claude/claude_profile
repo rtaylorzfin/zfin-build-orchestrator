@@ -46,6 +46,19 @@ for k in ('hasCompletedOnboarding', 'hasTrustDialogAccepted'):
     if not d.get(k):
         d[k] = True
         changed = True
+# 2b'. Pre-answer the two startup prompts every `claude --dangerously-skip-permissions` here
+#      would otherwise stop on: "trust this folder?" (recorded per project path) and the
+#      bypass-permissions warning. Both default to "No, exit", so an unattended launch (the
+#      zfin-fleet skill's crewmates) needed keystrokes timed against the screen. The container
+#      IS the sandbox the warning is about -- no docker socket, no ssh agent, no keys, push
+#      blocked (see the Dockerfile) -- so accepting it once here is the honest answer.
+proj = d.setdefault('projects', {}).setdefault('/opt/zfin/source_roots/zfin.org', {})
+if not proj.get('hasTrustDialogAccepted'):
+    proj['hasTrustDialogAccepted'] = True
+    changed = True
+if not d.get('bypassPermissionsModeAccepted'):
+    d['bypassPermissionsModeAccepted'] = True
+    changed = True
 # 2c. The headless browser (see the Dockerfile), as a user-scope MCP server. Added only when
 #     absent, so an entry you have edited survives. Playwright's Chromium, not the default
 #     Chrome channel, which does not exist here; --isolated keeps no profile between runs;
