@@ -103,7 +103,9 @@ cmd_up_wait() {
 cmd_intake() {
   local t; t=$(norm "$1"); ensure_sidecar "$t"
   local out; out=$(sc "$t")/data/ticket.md
-  acli jira workitem view "$(up "$t")" --fields '*all' --json | $PY "$SKILL_DIR/bin/adf2md.py" > "$out"
+  # the Jira key is the stack name minus any suffix: zfin-8072-v2 -> ZFIN-8072
+  local key; key=$(up "$t" | grep -oE '^[A-Z]+-[0-9]+')
+  acli jira workitem view "$key" --fields '*all' --json | $PY "$SKILL_DIR/bin/adf2md.py" > "$out"
   say "wrote $out ($(wc -l < "$out") lines)"
 }
 
