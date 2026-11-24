@@ -85,7 +85,9 @@ cmd_up() {
     say "herdr workspace $t created"
   fi
   local p; p=$(pane "$t" 1)
-  herdr pane run "$p" "cd $WT/main && z feature new $t ${flags[*]} --no-tmux 2>&1 | tee /tmp/fleet-$t-provision.log; echo FLEET-PROVISION-EXIT=\${PIPESTATUS[0]}"
+  # On success, leave pane 1's shell in the stack's worktree, so the developer can push from it.
+  # (A failed run stays in worktrees/main, where a retry would start.)
+  herdr pane run "$p" "cd $WT/main && z feature new $t ${flags[*]} --no-tmux 2>&1 | tee /tmp/fleet-$t-provision.log; rc=\${PIPESTATUS[0]}; echo FLEET-PROVISION-EXIT=\$rc; [ \$rc -eq 0 ] && cd $(wtdir "$t")"
   say "provisioning $t in $p (log /tmp/fleet-$t-provision.log); wait with: fleet up-wait $t"
 }
 
