@@ -37,6 +37,8 @@ The supervisor asks once before provisioning the batch, then creates one herdr w
 
 herdr's sidebar shows each crewmate as working, blocked, idle or done. You can type into a crewmate's pane at any time. Tell the supervisor afterwards so it can note it in `state.md`.
 
+**Reworking a merged ticket.** If a ticket's branch is already merged into main and the ticket then gets requested changes, the work goes on a new branch named `<ticket>-v2`, cut from main, and then `-v3` if it happens again. Ask for it the same way ("rework ZFIN-1111 as zfin-1111-v2"). The stack, workspace and branch carry the `-vN` name, while the Jira key and the commit prefix stay `ZFIN-1111`. Example: `zfin-8072-v2` (PR #2122) after #2116 merged.
+
 To resume the supervisor after a restart, run `claude --continue` in the same directory. Its per-ticket state lives in files (below), so a resumed or summarized supervisor rereads it rather than relying on memory.
 
 ## The lifecycle of one ticket
@@ -50,7 +52,7 @@ provisioning -> briefed -> plan-review -> implementing -> my-review -> ready-to-
 2. **Plan:** the crewmate's first brief always asks for a plan only, not code. On both tickets of the first run, the plan surfaced decisions before any code changed.
 3. **Rule:** the supervisor answers technical questions itself. Questions that are yours come to you with a recommendation, prefixed with the ticket, e.g. **[ZFIN-1234]**. If it doesn't need you right away, the supervisor picks the conservative option and records it under `open decisions` in `state.md`.
 4. **Implement**, then **review**. The supervisor reads the whole diff and asks the crewmate for evidence rather than guessing. That includes an anomaly sweep over the whole affected population for data-transforming changes, and proof that CI's own command runs any new test.
-5. **Hand-off:** the branch and SHA, what was verified and what wasn't, and a draft PR description. **You push and open the PR.** Neither Claude ever pushes.
+5. **Hand-off:** the branch and SHA, what was verified and what wasn't, and the PR description (the crewmate keeps it in `deliverables/PR.md`). **You push and open the PR.** Neither Claude ever pushes. The supervisor can set a PR's title and description with `gh pr edit --body-file` if you say yes: pasting long descriptions through the terminal truncated two of them. `fleet status --pr` shows, per ticket, whether the branch is pushed, the PR number, draft state, checks, and an empty or out-of-date description.
 6. **Teardown,** when you say so. The supervisor runs read-only checks: is the branch on a remote with nothing unpushed, is the worktree clean, which deliverables exist. It shows you the result and asks once. Then it:
    - copies `.sidecar/deliverables/` to `archive/reports/<ticket>/`;
    - exits the crewmate;
@@ -141,6 +143,22 @@ For the same reason the sidecar's profile pre-accepts Claude's folder-trust prom
 | Gaps the developer caught: a new test outside the CI suite; junk source data in a report | Review checklist items, and crewmate rules |
 | Crewmates added `Co-Authored-By` lines | Rule: only when the brief asks |
 | Report tooling (openpyxl only in system Python, no LibreOffice) | Not worth adding to this repo. Reports default to CSV or markdown; a spreadsheet only when asked, with what's already installed. |
+
+## Proposals from the 2026-11-24 run (four tickets)
+These came out of the second run. Smaller fixes went straight in: PR state in `fleet status --pr`, the Jira key for `-vN` stacks, a pushed-commit rule, a scheduled-jobs review item, "the supervisor doesn't edit a crewmate's worktree", and `deliverables/PR.md`.
+
+1. **A disposable root login for stacks only.** Browser checks were skipped twice (ZFIN-10503's edit forms, ZFIN-10588's root edit) because no crewmate had a login, and creating accounts is rightly off-limits. Proposal: `fleet up` (or the stack seed) creates one root test user with a random password stored in `.sidecar/data/`, *only* in feature-stack DBs. It must never reach a production dump. Open question: create it in the seed step or by a post-provision SQL hook.
+2. **A host-action broker.** Crewmates can't start or restart their own stack's services; running one Jenkins job (ZFIN-8072-v2) took three brief/report round trips for `z up jenkins` and a restart. Proposal:
+   - crewmates list requests in machine-readable frontmatter (`needs-host: [...]`, already prompted for as `## Needs from host`);
+   - `fleet wait` runs those that match an allowlist (`z up <svc>`, `z restart <svc>`, `docker restart <stack>-<svc>-1`, `z down`) for that stack only, then re-prompts the crewmate;
+   - anything else goes to the supervisor.
+
+   This keeps the crewmate's container free of the Docker socket.
+3. **Memory limits and parking.** Each stack's Tomcat runs with no memory limit (about 10–12 GB each; one OOM on 2026-11-23). Proposal:
+   - a `mem_limit` for tomcat in the feature-stack compose override;
+   - `fleet status` suggests `z down` for tickets waiting only on curators or reviewers (like ZFIN-10503 while it waits on the Antibody Registry).
+
+**Considered and not recommended: containerizing the supervisor.** It needs the Docker socket (root-equivalent on the host), herdr session control, the host's worktree paths, `gh`/`acli` credentials and `~/.claude` memory. So a container adds plumbing without adding isolation. It's only worth revisiting if the supervisor should run somewhere other than this machine. A tighter permission allowlist for the host supervisor is the better investment.
 
 ## Not done yet, maybe later
 - A watcher that wakes the supervisor on any crewmate state change, instead of per-ticket background waits.
