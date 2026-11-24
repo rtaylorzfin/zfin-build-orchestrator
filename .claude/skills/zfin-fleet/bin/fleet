@@ -153,9 +153,16 @@ cmd_send() {
 cmd_wait() {
   local t; t=$(norm "$1"); local tmo=${2:-3600}
   local n; n=$(last_no "$t"); [ -n "$n" ] || die "nothing sent to $t yet"
-  local f; f=$(sc "$t")/outbox/$n.md; local name; name=$(crew "$t"); local s=0
+  local out; out=$(sc "$t")/outbox; local name; name=$(crew "$t"); local s=0 f=
+  # The newest reply numbered >= $n counts, not only outbox/$n.md exactly: a brief sent while
+  # this wait runs (008 amending 007, say) is often answered in ONE combined outbox/008.md, and
+  # a wait pinned to 007.md then never returned (seen 2026-11-23).
+  newest_reply() {  # NNN is zero-padded, so a plain string comparison orders it
+    local x; x=$(ls "$out" 2>/dev/null | grep -E '^[0-9]+\.md$' | sort | tail -1)
+    [ -n "$x" ] && ! [ "${x%.md}" \< "$n" ] && echo "$out/$x"
+  }
   # Both conditions: the file alone can be half-written; idle alone can mean "asked a question".
-  until [ -f "$f" ] && case $(agent_status "$name") in done|idle) true;; *) false;; esac; do
+  until f=$(newest_reply) && [ -n "$f" ] && case $(agent_status "$name") in done|idle) true;; *) false;; esac; do
     sleep 10; s=$((s+10)); [ $s -lt "$tmo" ] || { echo "TIMEOUT after ${tmo}s; $name is $(agent_status "$name")"; exit 2; }
   done
   state_set "$t" waiting-on supervisor
