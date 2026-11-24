@@ -23,6 +23,7 @@ provisioning -> briefed -> plan-review -> implementing -> my-review -> ready-to-
 ```
 
 1. **Intake.** `acli jira workitem view <KEY>`. Read the comments: they often supersede the description. Check linked tickets and prior-art commits (`git log --grep`).
+   - **Rework of a merged ticket:** if the ticket's branch is already merged into main and the ticket got requested changes, work on a new branch `<ticket>-v2` (then `-v3`, ...) cut from main: `$F up zfin-1111-v2`. The Jira key and commit prefix stay `ZFIN-1111`; `fleet` derives them from the stack name. Check with `git log --oneline origin/main --grep <KEY>` or `gh pr list -R ZFIN/zfin --search <KEY> --state merged`.
 2. **Provision.** Ask once for the whole batch: "provision N stacks? (y/n)". Then:
    - `$F up <ticket> [z flags]`. The default is `-y --up --deploy --liquibase --node`. Use `--no-seed` and so on for a cold stack. Parallel runs are safe since orchestrator 08d4798.
    - Wait with `$F up-wait <ticket>`, **in the background** (`run_in_background`), so you stay responsive.
@@ -37,14 +38,14 @@ provisioning -> briefed -> plan-review -> implementing -> my-review -> ready-to-
 8. **Hand off.** Set `$F state <t> stage=ready-to-push waiting-on=developer`. Give the developer:
    - the branch and SHA;
    - what was verified, and what wasn't;
-   - a draft PR description built from `open decisions` and `for the PR description`.
-   The developer pushes and opens the PR. Never push.
+   - the PR description: the crewmate's `deliverables/PR.md`, reviewed by you.
+   The developer pushes and opens the PR. Never push. Long descriptions pasted through the terminal get truncated, so offer to apply it yourself with `gh pr edit <n> -R ZFIN/zfin --body-file <file>` (or `--title`), and run it only after the developer says yes; it is outward-facing.
 9. **Teardown**, only after the developer says so.
    - Run `$F check <ticket>`. It's read-only: is the branch pushed and matching origin, is the worktree clean, which deliverables are there.
    - Show the developer the result and ask "tear down <ticket>? (y/n)".
    - Then `$F down <ticket> --yes`. It archives `.sidecar/deliverables/` to `archive/reports/<ticket>/`, exits the crewmate, runs `z feature rm`, and closes the workspace.
 
-`$F status` shows every ticket's stage, who it's waiting on, and the crewmate's state. Reread a ticket's `state.md` (`$F state <t>`) before acting on it: it is the source of truth, and your own memory may have been summarized.
+`$F status` shows every ticket's stage, who it's waiting on, and the crewmate's state; `$F status --pr` adds push state, PR number, draft, checks, `EMPTY-DESCRIPTION` and `PR-HEAD-BEHIND`. Use it to answer "is everything pushed and PR'd?". Reread a ticket's `state.md` (`$F state <t>`) before acting on it: it is the source of truth, and your own memory may have been summarized.
 
 ## Review checklist
 - [ ] Read the whole diff, and judge whether its scope is minimal.
@@ -52,6 +53,7 @@ provisioning -> briefed -> plan-review -> implementing -> my-review -> ready-to-
 - [ ] Data-transforming change: an anomaly sweep over the **whole** affected population, not just the ticket's examples (`brief-sweep.md`). The sweep on 2026-11-20 found 4 general bugs.
 - [ ] UI or JS change: check from the host (`https://<t>.review.zfin.test`) that pages render and bundles load (200s), in addition to the crewmate's in-container checks.
 - [ ] Build passes (`gradle npmBuild` / `compileJava` / `dirtydeploy`, whichever applies).
+- [ ] Data change: which **scheduled jobs and triggers** read or rewrite the tables it touches? Check `server_apps/jenkins/trigger.production.properties` and the DB triggers, and run the relevant job's function in a rolled-back transaction after the change. On 2026-11-24, `Regen-Construct_d` (every 2h) would have renamed 24 constructs after a component re-point that looked correct in isolation.
 - [ ] The report says what was NOT verified. Pass those gaps on to the developer.
 - [ ] Reports or spreadsheets for the developer are in `.sidecar/deliverables/`. Anything left in `data/` is lost at teardown.
 
@@ -65,6 +67,8 @@ provisioning -> briefed -> plan-review -> implementing -> my-review -> ready-to-
   - Jira comments or transitions (show the draft);
   - any write to a shared mount (`stacks/mounts/*`).
 - **Never:** push, open PRs, force-push, ssh to remote VMs (not even read-only), `git stash`, stop the default herdr server.
+- **Don't edit a crewmate's worktree yourself.** Code changes go through the crewmate. If you must write something (e.g. an urgent fix), do it in a separate worktree on its own branch, then brief the crewmate to cherry-pick it after its current commit. Two writers in one worktree collide.
+- **Host actions a crewmate asks for** under `## Needs from host`: start or restart that stack's own services (`z up <svc>`, `docker restart <stack>-<svc>-1`) without asking; they're local and reversible. Anything touching other stacks, shared mounts, accounts, or the default herdr server goes to the developer.
 
 ## Gotchas
 - `z feature rm` deletes the worktree, `.sidecar/` included. That's why `fleet down` archives `deliverables/` first. Archive layout: `archive/reports/<ticket>/<name>`.

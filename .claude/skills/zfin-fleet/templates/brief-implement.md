@@ -10,4 +10,4 @@
 - <evidence I want in the report: tables, before/after samples, counts>
 - Throwaway drivers stay uncommitted, in `.sidecar/data/`.
 
-Commit once (`{{TICKET}}: ...`), then report in outbox/{{NNN}}.md.
+Commit per the ground rules (prefix `{{TICKET}}: `; a new commit if the branch is already pushed), update `deliverables/PR.md`, then report in outbox/{{NNN}}.md.

@@ -8,11 +8,13 @@
 #   fleet send <ticket> <brief.md>              next inbox/NNN.md (brief + rules), prompt the crewmate
 #   fleet wait <ticket> [timeout_s]             until outbox/NNN.md exists AND the crewmate is idle; print it
 #   fleet state <ticket> [key=value ...]        show state.md, or set fields in it
-#   fleet status                                one line per ticket: stage, waiting-on, crewmate state
+#   fleet status [--pr]                         one line per ticket: stage, waiting-on, crewmate state
+#                                               (--pr: pushed? PR number, draft, checks, empty description)
 #   fleet check <ticket>                        read-only pre-teardown checks (pushed? clean? deliverables?)
 #   fleet down <ticket> --yes                   archive deliverables, stop crewmate, z feature rm, close workspace
 #
-# <ticket> is the stack name, e.g. zfin-8072 (a bare number means zfin-<number>).
+# <ticket> is the stack name, e.g. zfin-8072 (a bare number means zfin-<number>). Rework of a
+# merged ticket uses zfin-8072-v2, -v3, ...; the Jira key and commit prefix stay ZFIN-8072.
 # Never pushes, never ssh's, never writes to shared mounts. `down` refuses without --yes:
 # the supervisor asks the developer first and passes --yes only after a "yes".
 set -euo pipefail
@@ -27,6 +29,9 @@ die() { echo "fleet: $*" >&2; exit 1; }
 say() { echo ">> $*"; }
 norm() { local t=$1; [[ $t =~ ^[0-9]+$ ]] && t=zfin-$t; echo "$t" | tr "[:upper:]" "[:lower:]"; }
 up() { echo "$1" | tr "[:lower:]" "[:upper:]"; }
+# Jira key = stack name minus any rework suffix: zfin-8072-v2 -> ZFIN-8072. A ticket that was
+# merged and then got requested changes is reworked on <ticket>-v2, -v3, ... (same Jira key).
+key() { up "$1" | grep -oE '^[A-Z]+-[0-9]+'; }
 num() { echo "${1#zfin-}"; }
 crew() { echo "crew-$(num "$1")"; }
 wtdir() { echo "$WT/$1"; }
@@ -103,9 +108,7 @@ cmd_up_wait() {
 cmd_intake() {
   local t; t=$(norm "$1"); ensure_sidecar "$t"
   local out; out=$(sc "$t")/data/ticket.md
-  # the Jira key is the stack name minus any suffix: zfin-8072-v2 -> ZFIN-8072
-  local key; key=$(up "$t" | grep -oE '^[A-Z]+-[0-9]+')
-  acli jira workitem view "$key" --fields '*all' --json | $PY "$SKILL_DIR/bin/adf2md.py" > "$out"
+  acli jira workitem view "$(key "$t")" --fields '*all' --json | $PY "$SKILL_DIR/bin/adf2md.py" > "$out"
   say "wrote $out ($(wc -l < "$out") lines)"
 }
 
@@ -146,8 +149,9 @@ cmd_send() {
   local t; t=$(norm "$1"); local brief=$2; [ -f "$brief" ] || die "no brief $brief"
   ensure_sidecar "$t"
   local n; n=$(next_no "$t"); local f; f=$(sc "$t")/inbox/$n.md
-  { sed "s/{{NNN}}/$n/g; s/{{TICKET}}/$(up "$t")/g" "$brief"; echo
-    sed "s/{{NNN}}/$n/g; s/{{TICKET}}/$(up "$t")/g" "$SKILL_DIR/templates/rules.md"; } > "$f"
+  # {{TICKET}} is the Jira key (commit prefix), never the -vN stack name.
+  { sed "s/{{NNN}}/$n/g; s/{{TICKET}}/$(key "$t")/g" "$brief"; echo
+    sed "s/{{NNN}}/$n/g; s/{{TICKET}}/$(key "$t")/g" "$SKILL_DIR/templates/rules.md"; } > "$f"
   herdr agent prompt "$(crew "$t")" "Read .sidecar/inbox/$n.md and follow it." >/dev/null
   state_set "$t" last "inbox $n sent $(date '+%F %H:%M') / outbox $(ls "$(sc "$t")/outbox" | grep -c '^[0-9]' || true) received"
   state_set "$t" waiting-on crewmate
@@ -179,12 +183,39 @@ cmd_state() {
   local kv; for kv in "$@"; do state_set "$t" "${kv%%=*}" "${kv#*=}"; done
 }
 
-cmd_status() {
+# Push and PR state for a ticket's branch. PRs live on the canonical repo (remote "canon",
+# e.g. ZFIN/zfin) with the branch pushed to the developer's fork ("origin"). Best effort: prints
+# "pr=?" if gh or the network isn't available.
+pr_line() {
+  local w; w=$(wtdir "$1"); local br; br=$(git -C "$w" branch --show-current 2>/dev/null) || { echo "git=?"; return; }
+  local l; l=$(git -C "$w" rev-parse --short=10 HEAD)
+  local r; r=$(git -C "$w" rev-parse --short=10 "origin/$br" 2>/dev/null || echo none)
+  local push; if [ "$r" = none ]; then push="unpushed"; elif [ "$r" = "$l" ]; then push="pushed"
+    else push="fork@$r(local $l)"; fi
+  local repo; repo=$(git -C "$w" remote get-url canon 2>/dev/null | sed -E 's#^.*github\.com[:/]##; s#\.git$##')
+  local pr="pr=?"
+  if [ -n "$repo" ] && command -v gh >/dev/null; then
+    pr=$(gh pr list -R "$repo" --head "$br" --state all --limit 1 \
+           --json number,state,isDraft,body,headRefOid,statusCheckRollup 2>/dev/null | $PY -c 'import json,sys
+ps=json.load(sys.stdin)
+if not ps: print("pr=none"); sys.exit()
+p=ps[0]; st="draft" if p["isDraft"] and p["state"]=="OPEN" else p["state"].lower()
+cs={(c.get("conclusion") or c.get("state") or "").upper() for c in p["statusCheckRollup"]}
+ck="fail" if cs & {"FAILURE","ERROR","CANCELLED","TIMED_OUT"} else "pending" if cs & {"","PENDING","IN_PROGRESS","QUEUED"} else "ok" if cs else "-"
+body="" if (p["body"] or "").strip() else " EMPTY-DESCRIPTION"
+stale="" if p["headRefOid"].startswith(sys.argv[1]) else " PR-HEAD-BEHIND"
+print("pr=#"+str(p["number"])+"("+st+",checks="+ck+")"+body+stale)' "$l" 2>/dev/null || echo "pr=?")
+  fi
+  echo "$push $pr"
+}
+
+cmd_status() {  # fleet status [--pr]: --pr adds push/PR state (one gh call per ticket)
   local d t
   for d in "$WT"/*/.sidecar/state.md; do
     [ -f "$d" ] || continue; t=$(basename "$(dirname "$(dirname "$d")")")
-    printf '%-14s stage=%-16s waiting-on=%-11s %s=%s\n' "$t" "$(state_get "$t" stage)" \
-      "$(state_get "$t" waiting-on)" "$(crew "$t")" "$(agent_status "$(crew "$t")")"
+    printf '%-14s stage=%-16s waiting-on=%-11s %s=%-5s %s\n' "$t" "$(state_get "$t" stage)" \
+      "$(state_get "$t" waiting-on)" "$(crew "$t")" "$(agent_status "$(crew "$t")")" \
+      "$([ "${1:-}" = --pr ] && pr_line "$t")"
   done
 }
 
@@ -230,7 +261,7 @@ cmd_down() {
 c=${1:-}; shift || true
 case $c in
   up) cmd_up "$@";; up-wait) cmd_up_wait "$@";; intake) cmd_intake "$@";; crew) cmd_crew "$@";;
-  send) cmd_send "$@";; wait) cmd_wait "$@";; state) cmd_state "$@";; status) cmd_status;;
+  send) cmd_send "$@";; wait) cmd_wait "$@";; state) cmd_state "$@";; status) cmd_status "$@";;
   check) cmd_check "$@";; down) cmd_down "$@";;
   *) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; [ -z "$c" ] || exit 2;;
 esac
