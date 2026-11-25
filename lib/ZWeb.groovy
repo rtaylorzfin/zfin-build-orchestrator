@@ -65,7 +65,7 @@ class ZWeb {
         server.createContext('/', { HttpExchange ex -> handle(ex) } as HttpHandler)
         server.executor = newPool(4)
         server.start()
-        def url = "http://127.0.0.1:$port/#t=$token"
+        String url = "http://127.0.0.1:$port/#t=$token"
         println "z web: $url"
         println "       (the #t= part is this run's key; Ctrl-C stops the server)"
         if (open && System.getProperty('os.name').toLowerCase().contains('mac'))
@@ -368,7 +368,7 @@ class ZWeb {
         println "z web: ${job.cmd}"
         pool.submit {
             try {
-                def pb = new ProcessBuilder(argv).directory(d).redirectErrorStream(true)
+                def pb = new ProcessBuilder(argv*.toString()).directory(d).redirectErrorStream(true)
                 // An activated stack in the shell that started z web must not redirect this one.
                 ['COMPOSE_FILE', 'COMPOSE_PROJECT_NAME', 'COMPOSE_ENV_FILES', 'ZFIN_STACK_PROJECT', 'ZFIN_STACK_DIR',
                  'ZFIN_STACK_HOST', 'ZFIN_STACK_URL', 'ZFIN_STACK_DIRECT', 'ZFIN_SEED'].each { pb.environment().remove(it) }
@@ -397,7 +397,7 @@ class ZWeb {
 
     /** git with stderr merged (push/fetch report there), no prompts, and a time limit. */
     private Map runGit(File d, List a) {
-        def pb = new ProcessBuilder(['git', '-C', d.absolutePath] + a).redirectErrorStream(true)
+        def pb = new ProcessBuilder((['git', '-C', d.absolutePath] + a)*.toString()).redirectErrorStream(true)
         pb.environment().put('GIT_TERMINAL_PROMPT', '0')
         def p = pb.start()
         def out = new StringBuilder()
