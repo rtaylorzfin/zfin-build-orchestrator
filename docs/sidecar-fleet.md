@@ -52,7 +52,7 @@ provisioning -> briefed -> plan-review -> implementing -> my-review -> ready-to-
 2. **Plan:** the crewmate's first brief always asks for a plan only, not code. On both tickets of the first run, the plan surfaced decisions before any code changed.
 3. **Rule:** the supervisor answers technical questions itself. Questions that are yours come to you with a recommendation, prefixed with the ticket, e.g. **[ZFIN-1234]**. If it doesn't need you right away, the supervisor picks the conservative option and records it under `open decisions` in `state.md`.
 4. **Implement**, then **review**. The supervisor reads the whole diff and asks the crewmate for evidence rather than guessing. That includes an anomaly sweep over the whole affected population for data-transforming changes, and proof that CI's own command runs any new test.
-5. **Hand-off:** the branch and SHA, what was verified and what wasn't, and the PR description (the crewmate keeps it in `deliverables/PR.md`). **You push and open the PR.** Neither Claude ever pushes. The supervisor can set a PR's title and description with `gh pr edit --body-file` if you say yes: pasting long descriptions through the terminal truncated two of them. `fleet status --pr` shows, per ticket, whether the branch is pushed, the PR number, draft state, checks, and an empty or out-of-date description.
+5. **Hand-off:** the branch and SHA, what was verified and what wasn't, and the PR description (the crewmate keeps it in `deliverables/PR.md`). **You push and open the PR.** Neither Claude ever pushes. The supervisor can set a PR's title and description with `gh pr edit --body-file` if you say yes: pasting long descriptions through the terminal truncated two of them. Before hand-off the supervisor runs `fleet status --pr`, which shows per ticket whether the branch is pushed, the PR number, draft state, checks, and an empty or out-of-date description. Ask "are the PRs up to date?" and it will run it for you.
 6. **Teardown,** when you say so. The supervisor runs read-only checks: is the branch on a remote with nothing unpushed, is the worktree clean, which deliverables exist. It shows you the result and asks once. Then it:
    - copies `.sidecar/deliverables/` to `archive/reports/<ticket>/`;
    - exits the crewmate;
@@ -79,7 +79,9 @@ status: done | needs-decision | blocked
 commits: <sha ...> | none
 ```
 
-Read these files any time. `fleet status` prints one line per ticket, and `fleet state <ticket>` prints its `state.md`. The helper lives at `.claude/skills/zfin-fleet/bin/fleet`.
+Read these files any time.
+
+**The `fleet` helper is for the supervisor, not for you.** It lives at `.claude/skills/zfin-fleet/bin/fleet` and does the mechanical steps (provisioning, briefs, waits, teardown) when the supervisor runs them. You never need to type it: ask in plain words ("spin up ZFIN-1234", "where are we?", "tear down ZFIN-1234") and the supervisor runs the matching command. If you want to look for yourself, two commands are read-only and safe: `fleet status [--pr]` prints one line per ticket, and `fleet state <ticket>` prints its `state.md`. Leave the others (`up`, `crew`, `send`, `down`) to the supervisor, which tracks what they change.
 
 ## Who may do what
 
