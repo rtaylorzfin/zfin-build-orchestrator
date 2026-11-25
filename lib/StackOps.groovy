@@ -191,130 +191,18 @@ class StackOps {
                 // Default is the SHORT answer: where it is, what it is, and whether it serves.
                 // Everything else -- ports, compose files, the container table -- is reference
                 // material you look up occasionally, and printing it every time buried the six
-                // lines anyone actually reads. `-v` for the rest.
+                // lines anyone actually reads. `-v` for the rest; `--json` for all of it as data
+                // (what `z web` reads). The facts and the text both live in StackStatus.
                 def verbose = rest.any { it in ['-v', '--verbose'] }
-                def active = zfinUtil.stackVar('ZFIN_STACK_PROJECT')
-                if (!active) { println "stack: none here -- cd into a checkout or feature worktree"; return }
-                def envf = zfinUtil.stackVar('COMPOSE_ENV_FILES')
-                def readEnv = { String key -> zfinUtil.envField(envf ? new File(envf) : null, key) }
-                def offset = readEnv('ZFIN_PORT_OFFSET')
-                // Branch: the checked-out branch of this stack's worktree (empty if ZFIN_STACK_DIR
-                // isn't a git worktree). The Jira key comes from the stack's name, which is the
-                // ticket for a feature, else from the branch; a branch is often the key plus a
-                // suffix (zfin-10510-v2), so only the key part is taken.
-                def dir = zfinUtil.stackVar('ZFIN_STACK_DIR')
-                def branch = dir ? zfinUtil.captureOutput(['git', '-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD']) : ''
-                def keyOf = { String s -> def m = s =~ /(?i)^([a-z]+-\d+)(?!\d)/; m ? m[0][1].toUpperCase() : null }
-                def ticket = keyOf(active) ?: (branch ? keyOf(branch) : null)
-                // PR "create" link: derive the GitHub owner/repo slug from origin (SSH or HTTPS
-                // form) and point at the open-a-PR page for this branch. Empty for non-GitHub origins.
-                def origin = dir ? zfinUtil.captureOutput(['git', '-C', dir, 'remote', 'get-url', 'origin']) : ''
-                def ghMatch = origin =~ /github\.com[:\/](.+?)(?:\.git)?\/?$/
-                def ghSlug = ghMatch ? ghMatch[0][1] : ''
-                println "stack: $active"
-                // The note from `z feature new --desc`: why this stack exists, which the ticket
-                // key alone does not say once there are a few of them.
-                def desc = ZfinUtil.envUnquote(readEnv(StackConfig.DESC_KEY))
-                if (desc)    println "  desc     : $desc"
-                // URL first: it is the thing you came for -- the one line you copy, paste or
-                // click. dir/branch answer "which stack is this", which you usually already know.
-                if (zfinUtil.stackVar('ZFIN_STACK_URL'))    println "  url      : ${zfinUtil.stackVar('ZFIN_STACK_URL')}"
-                if (zfinUtil.stackVar('ZFIN_STACK_DIRECT')) println "  direct   : ${zfinUtil.stackVar('ZFIN_STACK_DIRECT')}"
-                if (dir)     println "  dir      : $dir"
-                if (branch)  println "  branch   : $branch"
-                if (verbose && offset) println "  ports    : " + [['https', 'DOCKER_HTTPD_HTTPS_PORT'], ['db', 'DOCKER_DB_PORT'],
-                                                         ['debug', 'DOCKER_TOMCATDEBUG_PORT'], ['jenkins', 'DOCKER_JENKINS_HTTP_PORT']]
-                        .collect { n, k -> readEnv(k) ? "$n ${readEnv(k)}" : null }.findAll { it }.join('   ')
-                if (ticket)  println "  jira     : https://zfin.atlassian.net/browse/$ticket"
-                if (branch && ghSlug) println "  pr       : https://github.com/$ghSlug/pull/new/$branch"
-                if (zfinUtil.stackVar('ZFIN_SEED')) println "  seed     : ${zfinUtil.stackVar('ZFIN_SEED')}"
-                // Own or shared data, in the short view: it decides whether a write, a migration
-                // or a reindex here touches only this stack or every --shared-db feature too.
-                def sharedData = zfinUtil.stackVar('COMPOSE_FILE')?.contains('shared-db.yml')
-                println "  data     : " + (sharedData ? "shared (${zfinUtil.sharedProject()} -- writes reach every --shared-db stack)"
-                                                      : "own (this stack's db+solr)")
-                if (stackProxyNet()) {
-                    def onIt = zfinUtil.runningProxies().findAll { n, nets -> stackProxyNet() in nets }.keySet()
-                    println "  proxy    : " + (onIt ? "${onIt.join(', ')} on ${stackProxyNet()}"
-                                                    : "!! nothing on ${stackProxyNet()} -- z up says why")
+                def asJson  = rest.contains('--json')
+                def target  = StackStatus.target(zfinUtil)
+                if (!target) {
+                    println(asJson ? '{"stack": null}' : "stack: none here -- cd into a checkout or feature worktree")
+                    return
                 }
-                if (verbose) println "  compose  : ${zfinUtil.stackVar('COMPOSE_FILE') ?: '<none>'}"
-                if (verbose) println "  env-file : ${envf ?: '<none>'}"
-                // A one-line answer before the table. `docker compose ps` is accurate and
-                // unreadable at a glance -- eight rows of image digests and port maps to work out
-                // whether the thing is serving. Services, not container names: the name is the
-                // project prefix repeated eight times, and the service is what you act on
-                // (`z restart tomcat`). Unhealthy is called out separately from stopped, because
-                // a container that is Up but failing its healthcheck reads as fine in the table.
-                def psLine = { List filters ->
-                    zfinUtil.captureOutput(['docker', 'ps', '-a', '--filter',
-                            "label=com.docker.compose.project=${active}"] + filters +
-                            ['--format', '{{.Label "com.docker.compose.service"}}\t{{.Status}}'])?.trim()
-                }
-                def rows = (psLine([]) ?: '').readLines().findAll { it?.contains('\t') }
-                        .collect { def p = it.split('\t', 2); [svc: p[0], status: p[1]] }
-                        .findAll { it.svc }
-                def up     = rows.findAll { it.status.startsWith('Up') && !it.status.contains('unhealthy') }
-                def sick   = rows.findAll { it.status.contains('unhealthy') }
-                // A NON-ZERO exit is the line worth having. tomcat and httpd exiting 1 -- missing
-                // server.xml, unreadable Apache include -- looked identical to `base` and `blast`
-                // exiting 0, which they do by design every single `up`. Lumping them together
-                // teaches you to skip the line on the one day it matters.
-                def failed = rows.findAll { it.status =~ /Exited \((?!0\))/ }
-                def idle   = rows.findAll { !it.status.startsWith('Up') } - failed
-                println "  running  : ${up ? up*.svc.sort().join(' ') : '(none)'}"
-                // UNHEALTHY and FAILED stay in the short view: they print only when they apply,
-                // so they cost nothing on a healthy stack and are the whole point on a sick one.
-                if (sick)   println "  UNHEALTHY: ${sick*.svc.sort().join(' ')}"
-                if (failed) println "  FAILED   : ${failed.sort { it.svc }.collect { "${it.svc} (${it.status})" }.join(', ')}"
-                // The Jenkins login, which otherwise means `z exec jenkins -c 'cat <long path>'`.
-                // Read straight from the running container (docker exec, not a login shell), and
-                // only when jenkins is up; no file -- a password from JENKINS_ADMIN_PASSWORD, or
-                // OIDC in charge -- prints nothing. "default": the file is what the init script
-                // generated, and stays put if someone changes the password in Jenkins later.
-                if ((up + sick).any { it.svc == 'jenkins' }) {
-                    def jc = zfinUtil.captureOutput(['docker', 'ps', '-q',
-                            '--filter', "label=com.docker.compose.project=${active}",
-                            '--filter', 'label=com.docker.compose.service=jenkins'])?.readLines()?.find { it }
-                    def pw = jc ? zfinUtil.captureOutput(['docker', 'exec', jc, 'cat', StackConfig.JENKINS_ADMIN_PASSWORD_FILE]) : ''
-                    if (pw) println "  jenkins  : default login admin / $pw"
-                }
-                // A shared-data stack has no db/solr of its own -- the overlay suppresses them. One
-                // showing up means something ran compose WITHOUT the overlays (a bare `docker
-                // compose up` in the worktree's docker/), and it is not harmless: it joins this
-                // network under the same name as the shared container connected in with alias
-                // db/solr, so Docker's DNS answers `db` with either, at random, per lookup.
-                def strays = sharedData ? up.findAll { it.svc in StackConfig.DATA_SERVICES } + sick.findAll { it.svc in StackConfig.DATA_SERVICES } : []
-                if (strays) println "  STRAY    : own ${strays*.svc.sort().join('+')} on a shared-data stack -- ${strays*.svc.sort().collect { "`$it`" }.join('/')} " +
-                        "resolve${strays.size() == 1 ? 's' : ''} to it OR the shared one at random. Started without the overlays; " +
-                        "remove: docker rm -f ${strays*.svc.collect { "${active}-${it}-1" }.join(' ')}"
-                // `stopped` is noise by default -- base and blast exit 0 on every up by design.
-                if (verbose && idle) println "  stopped  : ${idle*.svc.sort().join(' ')}"
-                if (!verbose) { println ""; break }
-
-                println "\ncontainers:"
-                zfinUtil.runCommand(['docker', 'compose', 'ps'], [check: false])
-                // `docker compose ps` lists SERVICES, and `z run <svc>` containers are one-off
-                // `<project>-<svc>-run-<hash>` ones that it does not show. The sidecar is the
-                // one that matters: it is long-lived, it holds the worktree read-write, and it
-                // is why a stack can look idle while an agent is working in it.
-                def runners = zfinUtil.captureOutput(['docker', 'ps',
-                        '--filter', "label=com.docker.compose.project=${zfinUtil.stackVar('COMPOSE_PROJECT_NAME')}",
-                        '--filter', 'name=-run-',
-                        '--format', '{{.Names}}\t{{.Status}}\t{{.Image}}'])?.trim()
-                if (runners) {
-                    println "\none-off containers (z run):"
-                    runners.readLines().each { println "  ${it.replace('\t', '   ')}" }
-                }
-                // A --shared-db stack's data tier lives in the separate shared project,
-                // so `docker compose ps` above won't list it. Show it explicitly.
-                if (sharedData) {
-                    def proj = zfinUtil.stackVar('COMPOSE_PROJECT_NAME')
-                    println "\nshared data (project ${zfinUtil.sharedProject()}, connected into ${proj}_default):"
-                    new ProcessBuilder(['docker', 'ps', '-a',
-                        '--filter', "label=com.docker.compose.project=${zfinUtil.sharedProject()}".toString(),
-                        '--format', 'table {{.Names}}\t{{.Status}}\t{{.Image}}']).inheritIO().start().waitFor()
-                }
+                def st = StackStatus.collect(zfinUtil, target)
+                if (asJson) println StackStatus.json(st)
+                else StackStatus.print(zfinUtil, st, verbose)
                 break
 
             default: die("StackOps: unknown op '$op'", 2)

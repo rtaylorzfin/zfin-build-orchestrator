@@ -41,7 +41,7 @@ _z_complete() {
         up)                        if [[ "${COMP_WORDS[COMP_CWORD-1]}" == --arch ]]; then COMPREPLY=( $(compgen -W "amd64 arm64" -- "$cur") )
                                    else COMPREPLY=( $(compgen -W "$services --arch" -- "$cur") ); fi ;;
         stop|pull|log|restart)     COMPREPLY=( $(compgen -W "$services" -- "$cur") ) ;;
-        status)                    COMPREPLY=( $(compgen -W "-v --verbose" -- "$cur") ) ;;
+        status)                    COMPREPLY=( $(compgen -W "-v --verbose --json" -- "$cur") ) ;;
         freeze)                    COMPREPLY=( $(compgen -W "$(_z_features) --caches --compress --no-compress --to --force" -- "$cur") ) ;;
         thaw)                      COMPREPLY=( $(compgen -W "$(_z_features) --from --no-up --no-caches --force" -- "$cur") ) ;;
         resetwal)                  COMPREPLY=( $(compgen -W "$(_z_features) -y --yes" -- "$cur") ) ;;

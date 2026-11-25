@@ -60,7 +60,7 @@ Stack ops (act on the stack that owns the working directory):
   z pull [svc...]       pull image(s)
   z log  [svc...]       tail logs
   z restart [svc...]    restart service(s)
-  z status [-v]         the active stack: url, desc, dir, branch, data, what is running
+  z status [-v|--json]  the active stack: url, desc, dir, branch, data, what is running
                         (-v adds ports, compose/env files, and the container table)
 
 Feature ops:
