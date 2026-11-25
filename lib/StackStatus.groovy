@@ -108,7 +108,9 @@ class StackStatus {
         st.unhealthy = sick*.svc.sort()
         st.failed    = failed.sort { it.svc }.collect { [svc: it.svc, status: it.status] }
         st.stopped   = idle*.svc.sort()
-        st.state = st.running.contains(StackConfig.WEB_SERVICE) ? 'up' : (up || sick) ? 'partial' : 'down'
+        // "up" means httpd is running (healthy or not), as in `z feature ls`; a failing
+        // healthcheck shows separately under unhealthy.
+        st.state = (up + sick).any { it.svc == StackConfig.WEB_SERVICE } ? 'up' : (up || sick) ? 'partial' : 'down'
 
         // The Jenkins login, read straight from the running container. No file -- a password
         // from JENKINS_ADMIN_PASSWORD, or OIDC in charge -- means none. "default": the file is

@@ -119,6 +119,8 @@ Host:
   z config [ls|get|set|unset|path]       this host's settings (worktree/archive dirs, proxy, ...)
   z cert [install [<ticket>]]            the host's dev TLS certificate: where it is, how to trust it
   z proxy up|down|status|attach          serve every feature stack at https://<slug>.<domain>
+  z web [--port N] [--no-open]          a local page of every stack and worktree: status, push
+                                         state, PRs, crewmates; push / up / down / freeze / thaw
 
 Shared data stack (read-mostly features share ONE db+solr copy):
   z shared up|down|status [--tag T]     run/stop the shared db+solr (project zfin_shared);
@@ -159,6 +161,7 @@ switch (cmd) {
     case 'config':        runCmd('Config', rest); break
     case 'cert':          runCmd('Cert', rest); break
     case 'proxy':         runCmd('ProxyStack', rest); break
+    case 'web':           runCmd('ZWeb', rest); break
     // Resolves its own target (a container, a ticket, or the stack you stand in), so no
     // resolveStack: a container argument must not be overridden by the cwd's stack.
     case 'resetwal':      runCmd('ResetWal', rest); break

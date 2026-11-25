@@ -568,6 +568,25 @@ git worktree remove <worktree>    # add --force if dirty
 sudo ifconfig lo0 -alias <ip>     # (macOS only) drop the loopback alias
 ```
 
+### Every stack on one page (`z web`)
+
+```bash
+z web                             # http://127.0.0.1:7480/#t=<key>, opened in your browser
+z web --port 7481 --no-open       # another port; print the URL without opening it
+```
+
+`z web` serves a local page that refreshes itself. It has:
+- **One card per stack:** the main checkout and every feature worktree. Each card shows what `z status -v` reports, the branch compared with `origin`, the PR (state, CI checks, an empty description, a PR head that isn't the worktree's HEAD) and, for a ticket a fleet crewmate is working, its stage, who it's waiting on, and the summary of its last report.
+- **A table of the repo's other worktrees:** release branches and scratch checkouts, each with its branch and push state.
+- **A "Needs you" panel:** tickets waiting on you, commits to push, failing CI, services that exited with an error, and failed actions.
+
+Actions, each confirmed on the page first:
+- **Push:** a plain `git push origin <branch>`. It's offered only when the branch is ahead of origin and not behind it, and never for main or `release*` branches.
+- **Check origin:** runs `git fetch origin`. It also runs once when the server starts.
+- **`z up`, `z down`, `z freeze`, `z thaw`:** each runs in the stack's worktree as a background job, with its output shown on the card. Each is offered only in a state where it makes sense. `down` and `freeze` are hidden while that stack's crewmate is working.
+
+The server listens on 127.0.0.1 only. Every API call needs the key from the URL it prints, so neither another web page nor a stack's containers can drive it. The page's code is `lib/web/` (Preact + htm, vendored); see `lib/web/README.md`.
+
 ---
 
 ## Platform notes

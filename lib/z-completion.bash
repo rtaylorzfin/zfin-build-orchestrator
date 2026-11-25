@@ -30,7 +30,7 @@ _z_complete() {
     local cur sub argstart=2
     cur="${COMP_WORDS[COMP_CWORD]}"
     if (( COMP_CWORD == 1 )); then
-        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status freeze thaw resetwal build feature seed shared scaffold fresh-install shell-init env config cert proxy help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "run exec up stop down pull log restart status freeze thaw resetwal build feature seed shared scaffold fresh-install shell-init env config cert proxy web help" -- "$cur") )
         return
     fi
     sub="${COMP_WORDS[1]}"

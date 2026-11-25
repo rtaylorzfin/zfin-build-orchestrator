@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZFIN stacks</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --ink: #1c2330; --muted: #5d6878; --line: #dde2ea;
+  --up: #1f7a4d; --up-bg: #e3f4ea; --warn: #9a5b00; --warn-bg: #fdf0d9;
+  --bad: #b42323; --bad-bg: #fbe4e4; --idle: #56606e; --idle-bg: #eceff3;
+  --accent: #2759c9; --accent-bg: #e6edfb; --you: #7a3fc2; --you-bg: #f1e8fb;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11151b; --card: #1a2029; --ink: #e4e8ee; --muted: #9aa5b4; --line: #2c3440;
+    --up: #6fd19d; --up-bg: #173527; --warn: #f0b85a; --warn-bg: #3a2c12;
+    --bad: #ff8a8a; --bad-bg: #3d1a1a; --idle: #a7b0bc; --idle-bg: #262d37;
+    --accent: #8db0ff; --accent-bg: #1d2a47; --you: #c9a2ff; --you-bg: #2c1f42;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--card);
+  position: sticky; top: 0; z-index: 2; }
+header h1 { font-size: 17px; margin: 0 8px 0 0; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.spacer { flex: 1; }
+main { max-width: 1180px; margin: 0 auto; padding: 16px; }
+h2.sec { font-size: 14px; color: var(--muted); margin: 22px 0 8px; font-weight: 600; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font: inherit; font-size: 13px; padding: 3px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--bad); }
+button:disabled { opacity: .55; cursor: default; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px;
+  font-weight: 600; white-space: nowrap; }
+.up { color: var(--up); background: var(--up-bg); }
+.warn { color: var(--warn); background: var(--warn-bg); }
+.bad { color: var(--bad); background: var(--bad-bg); }
+.idle { color: var(--idle); background: var(--idle-bg); }
+.acc { color: var(--accent); background: var(--accent-bg); }
+.you { color: var(--you); background: var(--you-bg); }
+section.you-panel { border: 1px solid var(--you); background: var(--you-bg); border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 16px; }
+section.you-panel h2 { font-size: 14px; margin: 0 0 6px; color: var(--you); }
+section.you-panel ul { margin: 0; padding-left: 18px; }
+section.you-panel li { margin: 3px 0; }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card.dim { opacity: .8; }
+.head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.head .name { font-weight: 650; font-size: 15px; }
+.desc { color: var(--muted); font-size: 13px; }
+.row { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; font-size: 13px; min-width: 0; }
+.row .k { color: var(--muted); width: 62px; flex: none; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.svc { font-family: var(--mono); font-size: 12px; padding: 0 5px; border-radius: 4px; background: var(--idle-bg); }
+.svc.bad { background: var(--bad-bg); color: var(--bad); }
+.svc.warn { background: var(--warn-bg); color: var(--warn); }
+.subject { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.fleet { border-top: 1px dashed var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.box { white-space: pre-wrap; font-size: 12.5px; background: var(--bg); border-radius: 6px; padding: 6px 8px;
+  max-height: 9.5em; overflow: auto; }
+.box.mono { font-family: var(--mono); font-size: 12px; max-height: 14em; }
+.ops { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.confirm { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; background: var(--accent-bg);
+  padding: 6px 8px; border-radius: 6px; font-size: 13px; }
+.confirm .note { flex-basis: 100%; color: var(--muted); font-size: 12.5px; }
+details { font-size: 13px; }
+details summary { cursor: pointer; color: var(--muted); }
+table.kv { border-collapse: collapse; width: 100%; margin-top: 6px; }
+table.kv td { padding: 2px 6px 2px 0; vertical-align: top; word-break: break-all; white-space: pre-wrap; }
+table.kv td:first-child { color: var(--muted); white-space: nowrap; word-break: normal; width: 1%; }
+table.wt { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; overflow: hidden; font-size: 13px; }
+table.wt th, table.wt td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.wt th { color: var(--muted); font-weight: 600; font-size: 12px; }
+table.wt tr:last-child td { border-bottom: none; }
+.wt-wrap { overflow-x: auto; }
+.err { color: var(--bad); padding: 8px 0; white-space: pre-wrap; }
+.empty { color: var(--muted); }
+@media (max-width: 420px) { .grid { grid-template-columns: 1fr; } .row .k { width: 54px; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+import { html, render, useState, useEffect, useRef, useCallback } from "/htm-preact.mjs";
+
+// The key comes in the URL fragment (never sent to the server), and is kept for this tab.
+const token = (() => {
+  const m = location.hash.match(/t=([0-9a-f]+)/);
+  try {
+    if (m) { sessionStorage.setItem("zweb-token", m[1]); history.replaceState(null, "", location.pathname); }
+    return sessionStorage.getItem("zweb-token") || "";
+  } catch (e) { return m ? m[1] : ""; }
+})();
+
+async function api(path, body) {
+  const opt = { headers: { "X-Z-Token": token } };
+  if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  const j = await r.json().catch(() => ({ error: "HTTP " + r.status }));
+  if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+  return j;
+}
+
+const STATE = { up: ["up", "up"], partial: ["partial", "warn"], down: ["down", "idle"], frozen: ["frozen", "acc"], freezing: ["freezing", "warn"] };
+const AGENT = { working: "up", idle: "idle", blocked: "bad", done: "idle", none: "idle" };
+const ORDER = { up: 0, partial: 1, freezing: 2, down: 3, frozen: 4 };
+const youWait = f => f && /developer|ryan|\byou\b|host/i.test(f.waitingOn || "");
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const Ext = ({ href, children }) => html`<a href=${href} target="_blank" rel="noopener">${children}</a>`;
+const Pill = ({ cls = "idle", title, children }) => html`<span class=${"pill " + cls} title=${title}>${children}</span>`;
+
+const OP_INFO = {
+  up:     { label: "z up",     note: "Starts every service of the stack that isn't running." },
+  down:   { label: "z down",   note: "Removes the containers and network. Data volumes are kept; z up brings it back." },
+  freeze: { label: "z freeze", note: "Archives the volumes, then removes them. Takes minutes; z thaw restores it." },
+  thaw:   { label: "z thaw",   note: "Restores the volumes from the archive and starts the stack." },
+};
+
+function PushBadge({ g }) {
+  if (!g) return null;
+  switch (g.push) {
+    case "same":     return html`<${Pill} cls="up" title="origin has this exact commit">pushed</${Pill}>`;
+    case "ahead":    return html`<${Pill} cls="warn">${g.ahead} to push</${Pill}>`;
+    case "unpushed": return g.ahead ? html`<${Pill} cls="warn">not on origin · ${plural(g.ahead, "commit")}</${Pill}>`
+                                    : html`<${Pill} title="this branch is not on origin and has no commits of its own">not on origin</${Pill}>`;
+    case "behind":   return html`<${Pill} cls="acc" title="origin has commits this worktree lacks">behind ${g.behind}</${Pill}>`;
+    case "diverged": return html`<${Pill} cls="bad" title="needs a rebase or merge; never force-pushed from here">diverged +${g.ahead}/−${g.behind}</${Pill}>`;
+    default:         return html`<${Pill}>${g.push}</${Pill}>`;
+  }
+}
+
+function PrBadge({ s }) {
+  const p = s.pr;
+  if (!p) return s.prNew ? html`<${Ext} href=${s.prNew}>open a PR</${Ext}>` : html`<span class="empty">none</span>`;
+  const cls = { OPEN: "up", DRAFT: "idle", MERGED: "acc", CLOSED: "bad" }[p.state] || "idle";
+  const ck = { ok: "up", fail: "bad", pending: "warn", none: "idle" }[p.checks];
+  const stale = s.git?.sha && p.headSha && p.state !== "MERGED" && !p.headSha.startsWith(s.git.sha);
+  return html`<${Ext} href=${p.url}>#${p.number}</${Ext}>
+    <${Pill} cls=${cls}>${p.state.toLowerCase()}</${Pill}>
+    <${Pill} cls=${ck} title="CI checks">checks ${p.checks}</${Pill}>
+    ${p.emptyBody && html`<${Pill} cls="warn">empty description</${Pill}>`}
+    ${stale && html`<${Pill} cls="warn" title="the PR's head commit is not this worktree's HEAD">PR head ≠ HEAD</${Pill}>`}`;
+}
+
+// A two-step button: the first click shows what will run, the second runs it.
+function Confirmable({ label, danger, prompt, note, run, disabled }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!asking) return html`<button class=${danger ? "danger" : ""} disabled=${disabled || busy} onClick=${() => setAsking(true)}>${label}</button>`;
+  return html`<div class="confirm">${prompt}
+    <button class="primary" disabled=${busy} onClick=${async () => { setBusy(true); try { await run(); } finally { setBusy(false); setAsking(false); } }}>${busy ? "…" : label}</button>
+    <button onClick=${() => setAsking(false)}>Cancel</button>
+    ${note && html`<span class="note">${note}</span>`}</div>`;
+}
+
+function PushControl({ path, branch, g, onDone }) {
+  const [result, setResult] = useState(null);
+  if (!g?.canPush && !result) return null;
+  return html`<div class="ops">
+    ${g?.canPush && html`<${Confirmable} label="Push"
+        prompt=${html`git push origin <b class="mono">${branch}</b> (${plural(g.ahead, "commit")})?`}
+        run=${async () => {
+          try { const r = await api("/api/push", { path }); setResult((r.ok ? "✓ " : "✕ ") + r.output); }
+          catch (x) { setResult("✕ " + x.message); }
+          onDone();
+        }} />`}
+    ${result && html`<div class="box mono" style="flex-basis:100%">${result}</div>`}
+  </div>`;
+}
+
+function Ops({ s, onDone }) {
+  const [err, setErr] = useState("");
+  const busy = s.job?.running;
+  const crewBusy = s.fleet?.agent === "working";
+  const sidecar = (s.runners || []).length > 0;
+  return html`<div class="ops">
+    ${(s.ops || []).map(op => html`<${Confirmable} key=${op} label=${OP_INFO[op].label} disabled=${busy}
+        danger=${op === "down" || op === "freeze"}
+        prompt=${html`run <b class="mono">${OP_INFO[op].label}</b> on ${s.stack}?`}
+        note=${OP_INFO[op].note + (sidecar && (op === "down" || op === "freeze") ? " A z run container (crewmate sidecar) may be stopped too." : "")}
+        run=${async () => {
+          setErr("");
+          try { const r = await api("/api/action", { stack: s.worktree, op }); if (!r.ok) setErr(r.output); }
+          catch (x) { setErr(x.message); }
+          onDone();
+        }} />`)}
+    ${crewBusy && s.state !== "down" && html`<span class="meta">down/freeze hidden while the crewmate works</span>`}
+    ${err && html`<div class="err" style="flex-basis:100%">${err}</div>`}
+  </div>`;
+}
+
+function Job({ job }) {
+  const ref = useRef();
+  useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [job?.tail]);
+  if (!job) return null;
+  const secs = Math.round(((job.ended || Date.now()) - job.started) / 1000);
+  const st = job.running ? html`<${Pill} cls="warn">running ${secs}s</${Pill}>`
+           : job.exit === 0 ? html`<${Pill} cls="up">done in ${secs}s</${Pill}>` : html`<${Pill} cls="bad">exit ${job.exit}</${Pill}>`;
+  return html`<details open=${job.running}>
+    <summary><span class="mono">${job.cmd}</span> ${st}</summary>
+    <div class="box mono" ref=${ref}>${job.tail || "(no output yet)"}</div>
+  </details>`;
+}
+
+function Fleet({ f }) {
+  if (!f) return null;
+  const ag = f.agent || "none";
+  return html`<div class="fleet">
+    <div class="row"><span class="k">crew</span>
+      <${Pill} cls=${AGENT[ag] || "idle"}>${f.crewmate || "crewmate"} ${ag}</${Pill}>
+      <span>${f.stage}</span>
+      ${f.waitingOn && html`<${Pill} cls=${youWait(f) ? "you" : "idle"}>waiting on ${f.waitingOn}</${Pill}>`}
+      ${f.inbox > f.outbox && html`<span class="meta">on brief ${String(f.inbox).padStart(3, "0")}</span>`}</div>
+    ${f.openDecisions && f.openDecisions !== "-" && html`<div class="row"><span class="k">decide</span><span>${f.openDecisions}</span></div>`}
+    ${f.summary && html`<div class="row"><span class="k">${f.lastReport}</span></div><div class="box">${f.summary}</div>`}
+    ${f.needsHost && html`<div class="row"><span class="k">host</span><${Pill} cls="you">needs from host</${Pill}></div><div class="box">${f.needsHost}</div>`}
+  </div>`;
+}
+
+function Details({ s }) {
+  const g = s.git || {}, f = s.fleet;
+  const kv = [
+    ["dir", s.dir], ["HEAD", g.sha && `${g.sha} ${g.subject} (${g.when})`], ["direct", s.direct],
+    ["ports", Object.entries(s.ports).map(([k, v]) => `${k} ${v}`).join("   ")], ["seed", s.seed],
+    ["data", s.data === "shared" ? `shared (${s.sharedProject})` : "own"],
+    ["proxy", s.proxyNet && `${(s.proxies || []).join(", ") || "!! nothing"} on ${s.proxyNet}`],
+    ["jenkins", s.jenkinsPassword && `admin / ${s.jenkinsPassword}`],
+    ["stopped", s.stopped.join(" ")],
+    ["compose", (s.compose || "").split(":").map(p => p.split("/").pop()).join("  ")],
+    ["env-file", s.envFile], ["uncommitted", (g.dirtyFiles || []).join("\n")],
+    ["one-off", (s.runners || []).map(r => `${r.name}  ${r.status}`).join("\n")],
+    ["deliverables", f && (f.deliverables || []).join("\n")],
+    ...s.containers.map(c => [c.svc, c.status]),
+  ].filter(([, v]) => v);
+  return html`<details><summary>details</summary>
+    <table class="kv">${kv.map(([k, v]) => html`<tr><td>${k}</td><td>${v}</td></tr>`)}</table></details>`;
+}
+
+function StackCard({ s, refresh }) {
+  const [stLabel, stCls] = STATE[s.state] || [s.state, "idle"];
+  const g = s.git || {};
+  return html`<article class=${"card" + (s.state === "up" ? "" : " dim")}>
+    <div class="head"><span class="name">${s.stack}</span>
+      <${Pill} cls=${stCls}>${stLabel}</${Pill}>
+      ${s.strays.length > 0 && html`<${Pill} cls="bad" title="own db/solr on a shared-data stack">stray ${s.strays.join("+")}</${Pill}>`}
+      <span class="spacer"></span>
+      <span class="row">
+        ${s.url && s.state === "up" && html`<${Ext} href=${s.url}>site</${Ext}>`}
+        ${s.jira && html`<${Ext} href=${s.jira}>${s.ticket}</${Ext}>`}
+        ${s.ports.jenkins && s.running.includes("jenkins") && html`<${Ext} href=${"http://" + s.ports.jenkins}>jenkins</${Ext}>`}
+      </span></div>
+    ${s.desc && html`<div class="desc">${s.desc}</div>`}
+    <div class="row"><span class="k">running</span>
+      ${s.running.map(x => html`<span class="svc">${x}</span>`)}
+      ${s.unhealthy.map(x => html`<span class="svc warn" title="up but failing its healthcheck">${x} ✱</span>`)}
+      ${s.failed.map(x => html`<span class="svc bad" title=${x.status}>${x.svc} ✕</span>`)}
+      ${!s.running.length && !s.unhealthy.length && !s.failed.length && html`<span class="empty">nothing</span>`}</div>
+    <div class="row"><span class="k">branch</span><span class="mono">${s.branch || "—"}</span>
+      ${!s.main && html`<${PushBadge} g=${g} />`}
+      ${g.dirty > 0 && html`<${Pill} cls="warn" title="uncommitted changes (sidecar scratch excluded)">${g.dirty} uncommitted</${Pill}>`}</div>
+    ${g.subject && html`<div class="row"><span class="k">HEAD</span><span class="mono">${g.sha}</span><span class="subject" title=${g.subject}>${g.subject}</span></div>`}
+    ${!s.main && html`<div class="row"><span class="k">PR</span><${PrBadge} s=${s} /></div>`}
+    <${PushControl} path=${s.dir} branch=${s.branch} g=${g} onDone=${refresh} />
+    <${Ops} s=${s} onDone=${refresh} />
+    <${Job} job=${s.job} />
+    <${Fleet} f=${s.fleet} />
+    <${Details} s=${s} />
+  </article>`;
+}
+
+function Worktrees({ list, refresh }) {
+  if (!list?.length) return null;
+  return html`<h2 class="sec">Other worktrees (no stack)</h2>
+    <div class="wt-wrap"><table class="wt">
+      <tr><th>worktree</th><th>branch</th><th>origin</th><th>HEAD</th><th></th></tr>
+      ${list.map(w => html`<tr key=${w.path}>
+        <td title=${w.path}>${w.name}${w.prunable && html` <${Pill} cls="bad" title=${w.prunable}>prunable</${Pill}>`}${w.locked && html` <${Pill} title=${w.locked}>locked</${Pill}>`}</td>
+        <td class="mono">${w.branch}</td>
+        <td><${PushBadge} g=${w.git} />${w.git?.dirty > 0 && html` <${Pill} cls="warn">${w.git.dirty} uncommitted</${Pill}>`}</td>
+        <td><span class="mono">${w.git?.sha}</span> <span class="meta">${w.git?.subject} · ${w.git?.when}</span></td>
+        <td><${PushControl} path=${w.path} branch=${w.branch} g=${w.git} onDone=${refresh} /></td>
+      </tr>`)}
+    </table></div>`;
+}
+
+function NeedsYou({ stacks, worktrees }) {
+  const items = [];
+  for (const s of stacks) {
+    const f = s.fleet, n = html`<b>${s.stack}</b>`;
+    if (youWait(f)) items.push(html`${n}: waiting on you${f.openDecisions && f.openDecisions !== "-" ? ` — ${f.openDecisions}` : ""}`);
+    if (f?.needsHost) items.push(html`${n}: ${f.lastReport} needs something from the host`);
+    if (s.git?.canPush) items.push(html`${n}: ${plural(s.git.ahead, "commit")} to push`);
+    if (s.pr?.checks === "fail") items.push(html`${n}: CI failing on <${Ext} href=${s.pr.url}>#${s.pr.number}</${Ext}>`);
+    if (s.failed.length) items.push(html`${n}: ${s.failed.map(x => x.svc).join(", ")} exited with an error`);
+    if (s.job && !s.job.running && s.job.exit !== 0) items.push(html`${n}: ${s.job.label} failed (exit ${s.job.exit})`);
+  }
+  for (const w of worktrees || []) if (w.git?.canPush) items.push(html`<b>${w.name}</b>: ${plural(w.git.ahead, "commit")} to push`);
+  if (!items.length) return null;
+  return html`<section class="you-panel"><h2>Needs you</h2><ul>${items.map(i => html`<li>${i}</li>`)}</ul></section>`;
+}
+
+function App() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(token ? "" : "No key. Open the URL that `z web` printed (it ends in #t=…).");
+  const [fetching, setFetching] = useState(false);
+  const [at, setAt] = useState(null);
+
+  const refresh = useCallback(async () => {
+    if (!token) return;
+    try { setData(await api("/api/stacks")); setAt(new Date()); setErr(""); }
+    catch (e) { setErr("Could not load: " + e.message + " (is z web still running?)"); }
+  }, []);
+
+  // Poll every 10s, every 2s while a job runs; pause while the tab is hidden.
+  const jobRunning = data?.stacks.some(s => s.job?.running);
+  useEffect(() => {
+    refresh();
+    const id = setInterval(() => { if (!document.hidden) refresh(); }, jobRunning ? 2000 : 10000);
+    return () => clearInterval(id);
+  }, [jobRunning]);
+
+  const fetchOrigin = async () => {
+    setFetching(true);
+    try { const r = await api("/api/fetch", {}); if (r.exit) setErr("git fetch origin failed:\n" + r.output); }
+    catch (x) { setErr(x.message); }
+    setFetching(false); refresh();
+  };
+
+  const stacks = data ? [...data.stacks].sort((a, b) => (b.main - a.main) || (ORDER[a.state] - ORDER[b.state]) || a.stack.localeCompare(b.stack)) : [];
+  return html`
+    <header>
+      <h1>ZFIN stacks</h1>
+      <span class="meta">${data ? `${stacks.length} stacks · ${stacks.filter(s => s.state === "up").length} up · refreshed ${at?.toLocaleTimeString()} (${data.tookMs} ms)` : "loading…"}</span>
+      <span class="spacer"></span>
+      <span class="meta">${data?.fetchedAt ? `origin checked ${new Date(data.fetchedAt).toLocaleTimeString()}` : ""}</span>
+      <button disabled=${fetching} onClick=${fetchOrigin} title="git fetch origin, so the push state is current">${fetching ? "fetching…" : "Check origin"}</button>
+    </header>
+    <main>
+      ${err && html`<div class="err">${err}</div>`}
+      ${data && html`
+        <${NeedsYou} stacks=${stacks} worktrees=${data.worktrees} />
+        <div class="grid">${stacks.map(s => html`<${StackCard} key=${s.worktree} s=${s} refresh=${refresh} />`)}</div>
+        <${Worktrees} list=${data.worktrees} refresh=${refresh} />`}
+    </main>`;
+}
+
+render(html`<${App} />`, document.getElementById("app"));
+</script>
+</body>
+</html>
